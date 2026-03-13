@@ -1,0 +1,38 @@
+{
+  "name": "db-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for MySQL database operations",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "db-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "mysql",
+    "database"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "better-sqlite3": "^12.6.2",
+    "mysql2": "^3.19.1",
+    "pg": "^8.20.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.5.0",
+    "@types/pg": "^8.18.0",
+    "typescript": "^5.9.3"
+  }
+}
