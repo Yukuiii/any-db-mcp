@@ -1,27 +1,42 @@
 {
-  "name": "db-mcp",
+  "name": "any-db-mcp",
   "version": "1.0.0",
-  "description": "MCP Server for MySQL database operations",
+  "description": "MCP Server for MySQL, PostgreSQL and SQLite database operations",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "db-mcp": "dist/index.js"
+    "any-db-mcp": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build && chmod +x dist/index.js"
   },
   "keywords": [
     "mcp",
     "mysql",
-    "database"
+    "postgresql",
+    "sqlite",
+    "database",
+    "model-context-protocol"
   ],
+  "author": "Yukuiii",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yukuiii/any-db-mcp.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",

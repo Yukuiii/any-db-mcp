@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   const server = new McpServer({
-    name: "db-mcp",
+    name: "any-db-mcp",
     version: "1.0.0",
   });
 
