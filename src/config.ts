@@ -22,6 +22,10 @@ export interface DbConfig {
   readonly database: string;
   /** SQLite 文件路径 */
   readonly filepath: string;
+  /** MSSQL 专属:是否启用 TLS 加密(SQL Server 2019+ 默认要求) */
+  readonly encrypt: boolean;
+  /** MSSQL 专属:是否信任自签证书(开发/局域网常用) */
+  readonly trustServerCertificate: boolean;
 }
 
 /** 应用配置，启动后不可变 */
@@ -35,6 +39,7 @@ const DEFAULT_PORTS: Record<DatabaseType, number> = {
   mysql: 3306,
   postgresql: 5432,
   sqlite: 0,
+  mssql: 1433,
 };
 
 /**
@@ -57,12 +62,23 @@ export function loadConfig(): AppConfig {
           password: process.env.DB_PASSWORD || "",
           database: process.env.DB_NAME || "",
           filepath: process.env.DB_FILEPATH || "",
+          encrypt: parseBool(process.env.DB_ENCRYPT, true),
+          trustServerCertificate: parseBool(process.env.DB_TRUST_SERVER_CERTIFICATE, false),
         })
       : null,
     permissionMode: parsePermissionMode(process.env.PERMISSION_MODE),
   };
 
   return Object.freeze(config);
+}
+
+/** 解析布尔环境变量,接受 "1"/"true"/"yes" 为真,空值用默认 */
+function parseBool(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined || value === "") return defaultValue;
+  const v = value.trim().toLowerCase();
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return defaultValue;
 }
 
 /** 解析权限模式，非法值降级到 readwrite 并打 warning */

@@ -8,6 +8,7 @@ import { registerTools } from "./tools/index.js";
 import { MySQLAdapter } from "./adapters/mysql.js";
 import { PostgreSQLAdapter } from "./adapters/postgresql.js";
 import { SQLiteAdapter } from "./adapters/sqlite.js";
+import { MSSQLAdapter } from "./adapters/mssql.js";
 import type { DbConfig } from "./config.js";
 
 /** MCP Server 主入口 */
@@ -91,6 +92,16 @@ function createAdapterFromConfig(config: DbConfig) {
       });
     case "sqlite":
       return new SQLiteAdapter({ filepath: config.filepath });
+    case "mssql":
+      return new MSSQLAdapter({
+        host: config.host,
+        port: config.port,
+        user: config.user,
+        password: config.password,
+        database: config.database,
+        encrypt: config.encrypt,
+        trustServerCertificate: config.trustServerCertificate,
+      });
     default:
       throw new Error(`不支持的数据库类型: ${config.type}`);
   }

@@ -2,13 +2,13 @@
 
 English | [简体中文](./README.md)
 
-> An MCP (Model Context Protocol) server that lets LLMs safely operate on databases. Supports **MySQL / PostgreSQL / SQLite**.
+> An MCP (Model Context Protocol) server that lets LLMs safely operate on databases. Supports **MySQL / PostgreSQL / SQLite / Microsoft SQL Server**.
 
 [![npm version](https://img.shields.io/npm/v/@sakura0v0/any-db-mcp.svg)](https://www.npmjs.com/package/@sakura0v0/any-db-mcp)
 
 ## Features
 
-- **Unified adapter**: One tool surface for MySQL, PostgreSQL, and SQLite
+- **Unified adapter**: One tool surface for MySQL, PostgreSQL, SQLite, and MSSQL
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
 - **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
 - **Connection resilience**: TCP keepalive + automatic pool rebuild & retry on connection loss + health-check tool
@@ -96,13 +96,15 @@ Corresponding MCP client config:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PERMISSION_MODE` | Permission mode: `readonly` / `readwrite` / `full` | `readwrite` |
-| `DB_TYPE` | Database type: `mysql` / `postgresql` / `sqlite` | `mysql` |
+| `DB_TYPE` | Database type: `mysql` / `postgresql` / `sqlite` / `mssql` | `mysql` |
 | `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `3306` (MySQL) / `5432` (PG) |
+| `DB_PORT` | Database port | `3306` (MySQL) / `5432` (PG) / `1433` (MSSQL) |
 | `DB_USER` | Database user | `root` |
 | `DB_PASSWORD` | Database password | (empty) |
 | `DB_NAME` | Default database | (empty) |
 | `DB_FILEPATH` | SQLite database file path | (empty) |
+| `DB_ENCRYPT` | MSSQL only: enable TLS encryption | `true` |
+| `DB_TRUST_SERVER_CERTIFICATE` | MSSQL only: trust self-signed certificate | `false` |
 
 > When no `DB_*` vars are set, the server starts without connecting. The LLM must call the `connect` tool explicitly.
 
@@ -144,6 +146,26 @@ Example inputs the LLM passes to the `connect` tool:
   "filepath": "/path/to/database.db"
 }
 ```
+
+### Microsoft SQL Server
+
+```json
+{
+  "type": "mssql",
+  "host": "localhost",
+  "port": 1433,
+  "user": "sa",
+  "password": "xxx",
+  "database": "mydb",
+  "encrypt": true,
+  "trustServerCertificate": false
+}
+```
+
+> Wire-compatible databases reuse existing adapters:
+>
+> - **MariaDB / TiDB / OceanBase** (MySQL wire protocol) → use `type: mysql`
+> - **CockroachDB / YugabyteDB** (PostgreSQL wire protocol) → use `type: postgresql`
 
 ## Response Format
 
@@ -234,7 +256,8 @@ src/
 │   ├── types.ts          Unified DatabaseAdapter interface
 │   ├── mysql.ts          mysql2/promise pool implementation
 │   ├── postgresql.ts     pg pool implementation
-│   └── sqlite.ts         better-sqlite3 implementation
+│   ├── sqlite.ts         better-sqlite3 implementation
+│   └── mssql.ts          mssql pool implementation (SHOWPLAN_XML via transaction)
 └── tools/
     ├── index.ts          Tool registration entrypoint
     ├── connect.ts        connect tool

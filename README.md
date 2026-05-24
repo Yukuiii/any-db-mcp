@@ -2,13 +2,13 @@
 
 [English](./README.en.md) | 简体中文
 
-> 让大模型通过 MCP (Model Context Protocol) 安全地操作数据库。支持 **MySQL / PostgreSQL / SQLite**。
+> 让大模型通过 MCP (Model Context Protocol) 安全地操作数据库。支持 **MySQL / PostgreSQL / SQLite / Microsoft SQL Server**。
 
 [![npm version](https://img.shields.io/npm/v/@sakura0v0/any-db-mcp.svg)](https://www.npmjs.com/package/@sakura0v0/any-db-mcp)
 
 ## 特性
 
-- **统一适配**：MySQL / PostgreSQL / SQLite 三种数据库共用同一套工具接口
+- **统一适配**：MySQL / PostgreSQL / SQLite / MSSQL 四种数据库共用同一套工具接口
 - **三档权限模式**：`readonly` / `readwrite` / `full`，启动时由环境变量决定，**运行时不可篡改**（5 层防 LLM 提权设计）
 - **事务支持**：单工具批量提交，任一失败自动回滚
 - **连接弹性**：TCP keepalive + 连接丢失自动重建并重试 + 健康检查工具
@@ -96,13 +96,15 @@ node dist/index.js
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `PERMISSION_MODE` | 权限模式：`readonly` / `readwrite` / `full` | `readwrite` |
-| `DB_TYPE` | 数据库类型：`mysql` / `postgresql` / `sqlite` | `mysql` |
+| `DB_TYPE` | 数据库类型：`mysql` / `postgresql` / `sqlite` / `mssql` | `mysql` |
 | `DB_HOST` | 数据库主机 | `localhost` |
-| `DB_PORT` | 数据库端口 | `3306`（MySQL）/ `5432`（PG） |
+| `DB_PORT` | 数据库端口 | `3306`（MySQL）/ `5432`（PG）/ `1433`（MSSQL） |
 | `DB_USER` | 数据库用户名 | `root` |
 | `DB_PASSWORD` | 数据库密码 | （空） |
 | `DB_NAME` | 默认数据库 | （空） |
 | `DB_FILEPATH` | SQLite 数据库文件路径 | （空） |
+| `DB_ENCRYPT` | 仅 MSSQL：是否启用 TLS 加密 | `true` |
+| `DB_TRUST_SERVER_CERTIFICATE` | 仅 MSSQL：是否信任自签证书 | `false` |
 
 > 不配置 `DB_*` 时，Server 启动后不自动连接，需 LLM 主动调用 `connect` 工具。
 
@@ -144,6 +146,26 @@ LLM 调用 `connect` 工具时的入参示例：
   "filepath": "/path/to/database.db"
 }
 ```
+
+### Microsoft SQL Server
+
+```json
+{
+  "type": "mssql",
+  "host": "localhost",
+  "port": 1433,
+  "user": "sa",
+  "password": "xxx",
+  "database": "mydb",
+  "encrypt": true,
+  "trustServerCertificate": false
+}
+```
+
+> 协议兼容数据库可直接复用现有适配器:
+>
+> - **MariaDB / TiDB / OceanBase** 等 MySQL 协议兼容数据库 → 选 `type: mysql`
+> - **CockroachDB / YugabyteDB** 等 PG 协议兼容数据库 → 选 `type: postgresql`
 
 ## 响应格式
 
@@ -234,7 +256,8 @@ src/
 │   ├── types.ts          DatabaseAdapter 统一接口
 │   ├── mysql.ts          mysql2/promise 连接池实现
 │   ├── postgresql.ts     pg 连接池实现
-│   └── sqlite.ts         better-sqlite3 实现
+│   ├── sqlite.ts         better-sqlite3 实现
+│   └── mssql.ts          mssql 连接池实现(SHOWPLAN_XML via transaction)
 └── tools/
     ├── index.ts          所有 Tools 注册入口
     ├── connect.ts        connect 工具

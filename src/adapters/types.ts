@@ -1,5 +1,5 @@
 /** 数据库类型 */
-export type DatabaseType = "mysql" | "postgresql" | "sqlite";
+export type DatabaseType = "mysql" | "postgresql" | "sqlite" | "mssql";
 
 /** 表信息 */
 export interface TableColumn {
