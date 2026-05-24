@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "../db.js";
+import { checkSingleStatement } from "./sql-patterns.js";
 import { ok, fail, errorMessage } from "./response.js";
 
 /**
@@ -29,6 +30,10 @@ export function registerExplainTool(server: McpServer): void {
     async ({ sql }) => {
       const startedAt = performance.now();
       try {
+        const single = checkSingleStatement(sql);
+        if (!single.ok) {
+          return fail(single.reason!);
+        }
         if (HAS_EXPLAIN_PREFIX.test(sql)) {
           return fail("请不要自带 EXPLAIN 前缀,工具会自动拼接。");
         }
