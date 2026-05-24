@@ -9,6 +9,7 @@
 ## 特性
 
 - **统一适配**：MySQL / PostgreSQL / SQLite / MSSQL 四种数据库共用同一套工具接口
+- **MCP Resources 暴露 schema**：`db://tables` 与 `db://table/{name}` 让客户端主动消化库结构,大幅减少每次对话重复 describe 的 token 开销
 - **三档权限模式**：`readonly` / `readwrite` / `full`，启动时由环境变量决定，**运行时不可篡改**（5 层防 LLM 提权设计）
 - **事务支持**：单工具批量提交，任一失败自动回滚
 - **连接弹性**：TCP keepalive + 连接丢失自动重建并重试 + 健康检查工具
@@ -230,6 +231,23 @@ LLM 调用 `connect` 工具时的入参示例：
 | PostgreSQL | `pg_class.reltuples` | `true` | 依赖 ANALYZE，从未分析时为 `null` |
 | SQLite | `SELECT COUNT(*)` | `false` | 本地文件，精确值 |
 
+## MCP Resources
+
+除工具外,server 还暴露两个 MCP Resource,让客户端可以主动订阅库结构(配合
+`notifications/resources/list_changed`,连接切换时自动刷新):
+
+| URI | 类型 | 说明 |
+|-----|------|------|
+| `db://tables` | 静态 | 当前库的所有表名 + 估算行数,JSON 格式,适合 LLM 一次摸清规模量级 |
+| `db://table/{name}` | 动态模板 | 单表的列定义与索引,每张表自动一个 URI(由 server 根据当前库动态生成) |
+
+`connect` / `disconnect` 成功后会发送 `notifications/resources/list_changed`,
+支持订阅的客户端会自动刷新可用资源列表。未连接时读 `db://tables` 返回 `connected: false`
+的友好提示,读不存在的表返回 `error` 字段。
+
+> 与 `list_tables` / `describe_table` 工具的区别:Resources 是"声明式订阅",由客户端缓存并复用,
+> 适合放进每次对话的上下文;Tools 是"命令式调用",适合需要最新数据(如刚做完写入)或需要采样数据时。
+
 ## 事务示例
 
 LLM 调用 `transaction` 工具：
@@ -269,9 +287,10 @@ src/
     ├── list-tables.ts    list_tables 工具
     ├── describe-table.ts describe_table 工具
     ├── explain.ts        explain 工具
+    ├── resources.ts      MCP Resources(db://tables + db://table/{name})
     ├── permission.ts     权限检查 helper
     ├── response.ts       统一响应工厂 ok() / fail()
-    └── sql-patterns.ts   SQL 类型正则
+    └── sql-patterns.ts   SQL 类型正则 + 多语句拦截
 ```
 
 ## License

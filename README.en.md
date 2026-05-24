@@ -9,6 +9,7 @@ English | [简体中文](./README.md)
 ## Features
 
 - **Unified adapter**: One tool surface for MySQL, PostgreSQL, SQLite, and MSSQL
+- **MCP Resources for schema**: `db://tables` and `db://table/{name}` let clients subscribe to live schema metadata, cutting the per-conversation token cost of repeated describe calls
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
 - **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
 - **Connection resilience**: TCP keepalive + automatic pool rebuild & retry on connection loss + health-check tool
@@ -230,6 +231,27 @@ Every tool returns a unified JSON structure.
 | PostgreSQL | `pg_class.reltuples` | `true` | Depends on ANALYZE; `null` if never analyzed |
 | SQLite | `SELECT COUNT(*)` | `false` | Local file, exact value |
 
+## MCP Resources
+
+In addition to tools, the server exposes two MCP Resources so clients can
+subscribe to live schema metadata (with `notifications/resources/list_changed`
+firing on connect/disconnect):
+
+| URI | Kind | Description |
+|-----|------|-------------|
+| `db://tables` | Static | All table names + estimated row counts as JSON; lets the LLM size up the database in one read |
+| `db://table/{name}` | Dynamic template | Column and index definitions per table; one URI per table, generated from the live connection |
+
+Successful `connect` / `disconnect` calls emit
+`notifications/resources/list_changed`; subscribing clients refresh
+automatically. Reading `db://tables` while disconnected returns a friendly
+`connected: false`; reading a non-existent table returns an `error` field.
+
+> **Resources vs. `list_tables` / `describe_table`**: Resources are
+> declarative — clients cache them and reuse across turns, ideal for
+> populating context. The tools are imperative — use them when you need the
+> very latest state (right after a write) or sample data.
+
 ## Transaction Example
 
 LLM calls the `transaction` tool:
@@ -269,9 +291,10 @@ src/
     ├── list-tables.ts    list_tables tool
     ├── describe-table.ts describe_table tool
     ├── explain.ts        explain tool
+    ├── resources.ts      MCP Resources (db://tables + db://table/{name})
     ├── permission.ts     Permission check helper
     ├── response.ts       Unified response factory: ok() / fail()
-    └── sql-patterns.ts   SQL-type regexes
+    └── sql-patterns.ts   SQL-type regexes + multi-statement guard
 ```
 
 ## License

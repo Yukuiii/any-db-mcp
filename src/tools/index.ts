@@ -9,8 +9,9 @@ import { registerTransactionTool } from "./transaction.js";
 import { registerListTablesTool } from "./list-tables.js";
 import { registerDescribeTableTool } from "./describe-table.js";
 import { registerExplainTool } from "./explain.js";
+import { registerResources } from "./resources.js";
 
-/** 注册所有 MCP Tools 到 Server 实例 */
+/** 注册所有 MCP Tools 与 Resources 到 Server 实例 */
 export function registerTools(server: McpServer, config: AppConfig): void {
   registerConnectTool(server, config);
   registerDisconnectTool(server);
@@ -21,4 +22,5 @@ export function registerTools(server: McpServer, config: AppConfig): void {
   registerListTablesTool(server);
   registerDescribeTableTool(server);
   registerExplainTool(server);
+  registerResources(server);
 }

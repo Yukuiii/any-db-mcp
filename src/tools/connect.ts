@@ -58,6 +58,9 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
         const connection = formatConnectionInfo(type, { host, port, database, filepath });
         const tablesPayload = await safeListTables();
 
+        // 通知客户端 db://table/{name} 资源列表已变化(原库的表名不再适用)
+        notifyResourceListChanged(server);
+
         return ok({
           message: `已成功连接到 ${connection}`,
           type,
@@ -71,6 +74,18 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
       }
     }
   );
+}
+
+/**
+ * 触发客户端刷新 resources/list。如果 server 未声明 resources 能力(理论不会发生),
+ * 调用会抛错,这里吞掉避免影响 connect 本身。
+ */
+function notifyResourceListChanged(server: McpServer): void {
+  try {
+    server.sendResourceListChanged();
+  } catch {
+    // resource 通知不是关键路径,失败不应影响 connect 结果
+  }
 }
 
 /** 各数据库默认端口 */
