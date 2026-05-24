@@ -2,6 +2,7 @@ import type {
   DatabaseAdapter,
   ExecuteResult,
   TableDescription,
+  TableRowCount,
   TransactionResult,
 } from "./adapters/types.js";
 
@@ -67,6 +68,16 @@ class DatabaseManager {
   /** 查看表结构 */
   async describeTable(table: string): Promise<TableDescription> {
     return this.getAdapter().describeTable(table);
+  }
+
+  /** 采样表中前 N 行数据 */
+  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+    return this.getAdapter().sampleData(table, limit);
+  }
+
+  /** 获取表行数(估算或精确) */
+  async estimateRowCount(table: string): Promise<TableRowCount> {
+    return this.getAdapter().estimateRowCount(table);
   }
 
   /** 检查是否已连接 */

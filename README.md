@@ -12,6 +12,8 @@
 - **三档权限模式**：`readonly` / `readwrite` / `full`，启动时由环境变量决定，**运行时不可篡改**（5 层防 LLM 提权设计）
 - **事务支持**：单工具批量提交，任一失败自动回滚
 - **连接弹性**：TCP keepalive + 连接丢失自动重建并重试 + 健康检查工具
+- **一次调研到位**：`describe_table` 一次返回列定义、索引、行数估算、数据采样，减少 LLM 来回试探
+- **响应耗时透明**：所有 SQL 类工具返回 `elapsedMs`，便于 LLM 感知性能并调整策略
 - **统一 JSON 响应**：所有工具返回结构化 JSON，便于 LLM 解析
 - **零部署**：通过 `npx` 一行命令即可在任意 MCP 客户端中使用
 
@@ -26,7 +28,7 @@
 | `execute` | 执行单条写操作（DML，或 `full` 模式下 DDL） | ✓ |
 | `transaction` | 在事务中顺序执行多条 SQL，任一失败回滚 | ✓ |
 | `list_tables` | 列出当前连接数据库的所有表名 | 否 |
-| `describe_table` | 查看指定表的列定义与索引详情 | 否 |
+| `describe_table` | 一次返回指定表的列定义、索引、估算行数与数据采样 | 否 |
 | `explain` | 获取 SQL 执行计划（不实际执行原 SQL），辅助优化 | 否 |
 
 ## 权限模式（PERMISSION_MODE）
@@ -156,7 +158,8 @@ LLM 调用 `connect` 工具时的入参示例：
   "rows": [
     { "id": 1, "name": "Alice" },
     { "id": 2, "name": "Bob" }
-  ]
+  ],
+  "elapsedMs": 3
 }
 ```
 
@@ -168,6 +171,42 @@ LLM 调用 `connect` 工具时的入参示例：
   "error": "当前权限模式为 readonly，禁止任何写操作。"
 }
 ```
+
+## describe_table 增强响应
+
+调用 `describe_table` 时可传入 `sampleLimit`（默认 3，0 表示不采样，最大 20）。响应一次性返回结构、索引、行数估算与采样数据：
+
+```json
+{
+  "success": true,
+  "table": "users",
+  "columns": [
+    { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null },
+    { "name": "email", "type": "varchar(120)", "nullable": false, "key": "UNI", "extra": "", "defaultValue": null }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uk_email", "columns": ["email"], "unique": true }
+  ],
+  "rowCount": 12453,
+  "rowCountIsEstimate": true,
+  "sampleCount": 3,
+  "sample": [
+    { "id": 1, "email": "alice@example.com" },
+    { "id": 2, "email": "bob@example.com" },
+    { "id": 3, "email": "carol@example.com" }
+  ],
+  "elapsedMs": 12
+}
+```
+
+**行数估算策略**：
+
+| 数据库 | 数据源 | `rowCountIsEstimate` | 备注 |
+|--------|--------|----------------------|------|
+| MySQL | `information_schema.TABLES.TABLE_ROWS` | `true` | InnoDB 估算，避免 COUNT(*) 全表扫描 |
+| PostgreSQL | `pg_class.reltuples` | `true` | 依赖 ANALYZE，从未分析时为 `null` |
+| SQLite | `SELECT COUNT(*)` | `false` | 本地文件，精确值 |
 
 ## 事务示例
 

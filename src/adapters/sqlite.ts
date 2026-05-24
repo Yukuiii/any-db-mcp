@@ -5,6 +5,7 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TableRowCount,
   TransactionResult,
   TransactionStepResult,
 } from "./types.js";
@@ -113,8 +114,11 @@ export class SQLiteAdapter implements DatabaseAdapter {
   async describeTable(table: string): Promise<TableDescription> {
     this.ensureConnected();
 
+    // PRAGMA 不支持参数化,改用 quote 后的字符串字面值;同时校验合法标识符避免注入
+    const safeTable = sqliteSafeIdent(table);
+
     // 列信息
-    const colRows = this.db!.prepare(`PRAGMA table_info('${table}')`).all() as {
+    const colRows = this.db!.prepare(`PRAGMA table_info('${safeTable}')`).all() as {
       cid: number;
       name: string;
       type: string;
@@ -133,7 +137,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     }));
 
     // 索引信息
-    const idxListRows = this.db!.prepare(`PRAGMA index_list('${table}')`).all() as {
+    const idxListRows = this.db!.prepare(`PRAGMA index_list('${safeTable}')`).all() as {
       seq: number;
       name: string;
       unique: number;
@@ -141,7 +145,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
 
     const indexes: TableIndex[] = [];
     for (const idx of idxListRows) {
-      const idxInfoRows = this.db!.prepare(`PRAGMA index_info('${idx.name}')`).all() as {
+      const safeIdxName = sqliteSafeIdent(idx.name);
+      const idxInfoRows = this.db!.prepare(`PRAGMA index_info('${safeIdxName}')`).all() as {
         seqno: number;
         cid: number;
         name: string;
@@ -156,9 +161,53 @@ export class SQLiteAdapter implements DatabaseAdapter {
     return { table, columns, indexes };
   }
 
+  /** 采样前 N 行数据 */
+  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+    this.ensureConnected();
+    const ident = quoteSqliteIdent(table);
+    const safeLimit = clampLimit(limit);
+    return this.db!.prepare(`SELECT * FROM ${ident} LIMIT ${safeLimit}`).all() as Record<
+      string,
+      unknown
+    >[];
+  }
+
+  /** SQLite 没有元数据估算,本地文件 COUNT(*) 很快,返回精确值 */
+  async estimateRowCount(table: string): Promise<TableRowCount> {
+    this.ensureConnected();
+    const ident = quoteSqliteIdent(table);
+    const row = this.db!.prepare(`SELECT COUNT(*) AS n FROM ${ident}`).get() as { n: number };
+    return { value: Number(row.n), isEstimate: false };
+  }
+
   private ensureConnected(): void {
     if (!this.db) {
       throw new Error("SQLite 未连接");
     }
   }
+}
+
+/** SQLite 标识符 quote:双引号包裹,内部双引号双写 */
+function quoteSqliteIdent(name: string): string {
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
+/**
+ * PRAGMA 既不支持 ? 参数化,也不接受 quoted 标识符(只接受字符串字面值),
+ * 因此用白名单校验法兜底:仅允许常见标识符字符,且 ' 必须双写。
+ */
+function sqliteSafeIdent(name: string): string {
+  if (!/^[A-Za-z0-9_][A-Za-z0-9_\-$]*$/.test(name)) {
+    throw new Error(`非法的 SQLite 标识符: ${name}`);
+  }
+  return name.replace(/'/g, "''");
+}
+
+/** 采样行数夹紧到 [0, 20] */
+function clampLimit(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  const i = Math.trunc(n);
+  if (i < 0) return 0;
+  if (i > 20) return 20;
+  return i;
 }

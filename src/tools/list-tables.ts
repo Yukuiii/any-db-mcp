@@ -11,11 +11,13 @@ export function registerListTablesTool(server: McpServer): void {
         "列出当前连接数据库的所有表名。基于 connect 工具建立的连接（MySQL 当前 database / PostgreSQL public schema / SQLite 当前文件）。如需查看其他数据库或 schema，请使用 query 工具直接执行相应 SQL。",
     },
     async () => {
+      const startedAt = performance.now();
       try {
         const tables = await db.listTables();
         return ok({
           tableCount: tables.length,
           tables,
+          elapsedMs: Math.round(performance.now() - startedAt),
         });
       } catch (error) {
         return fail(`获取表列表失败: ${errorMessage(error)}`);

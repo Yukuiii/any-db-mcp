@@ -15,15 +15,20 @@ export function registerQueryTool(server: McpServer): void {
       },
     },
     async ({ sql }) => {
+      const startedAt = performance.now();
       try {
         if (!READONLY_SQL_PATTERN.test(sql)) {
           return fail(
-            "query 工具仅支持 SELECT / SHOW / DESCRIBE / EXPLAIN 语句。如需执行写操作，请使用 execute 工具。"
+            "query 工具仅支持 SELECT / SHOW / DESCRIBE / EXPLAIN 语句。如需执行写操作,请使用 execute 工具。"
           );
         }
 
         const rows = await db.query(sql);
-        return ok({ rowCount: rows.length, rows });
+        return ok({
+          rowCount: rows.length,
+          rows,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        });
       } catch (error) {
         return fail(`查询失败: ${errorMessage(error)}`);
       }

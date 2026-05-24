@@ -27,9 +27,10 @@ export function registerExplainTool(server: McpServer): void {
       },
     },
     async ({ sql }) => {
+      const startedAt = performance.now();
       try {
         if (HAS_EXPLAIN_PREFIX.test(sql)) {
-          return fail("请不要自带 EXPLAIN 前缀，工具会自动拼接。");
+          return fail("请不要自带 EXPLAIN 前缀,工具会自动拼接。");
         }
         if (!EXPLAINABLE_SQL_PATTERN.test(sql)) {
           return fail(
@@ -41,6 +42,7 @@ export function registerExplainTool(server: McpServer): void {
         return ok({
           rowCount: plan.length,
           plan,
+          elapsedMs: Math.round(performance.now() - startedAt),
         });
       } catch (error) {
         return fail(`获取执行计划失败: ${errorMessage(error)}`);

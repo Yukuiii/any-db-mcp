@@ -25,6 +25,17 @@ export interface TableDescription {
   indexes: TableIndex[];
 }
 
+/**
+ * 表行数信息。
+ * - 估算值（MySQL information_schema / PG pg_class.reltuples）速度快但可能不准；
+ * - SQLite 用真实 COUNT(*),isEstimate = false；
+ * - 元数据缺失时 value 为 null。
+ */
+export interface TableRowCount {
+  value: number | null;
+  isEstimate: boolean;
+}
+
 /** SQL 执行结果 */
 export interface ExecuteResult {
   affectedRows: number;
@@ -80,4 +91,10 @@ export interface DatabaseAdapter {
 
   /** 查看表结构 */
   describeTable(table: string): Promise<TableDescription>;
+
+  /** 采样表中前 N 行数据,用于让 LLM 直观了解字段值 */
+  sampleData(table: string, limit: number): Promise<Record<string, unknown>[]>;
+
+  /** 获取表行数(优先使用元数据估算,SQLite 直接 COUNT) */
+  estimateRowCount(table: string): Promise<TableRowCount>;
 }

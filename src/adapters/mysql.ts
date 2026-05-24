@@ -5,6 +5,7 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TableRowCount,
   TransactionResult,
   TransactionStepResult,
 } from "./types.js";
@@ -143,9 +144,10 @@ export class MySQLAdapter implements DatabaseAdapter {
   async describeTable(table: string): Promise<TableDescription> {
     return this.withRetry(async () => {
       this.ensureConnected();
+      const ident = quoteMysqlIdent(table);
 
       // 列信息
-      const [colRowsRaw] = await this.pool!.query(`DESCRIBE \`${table}\``);
+      const [colRowsRaw] = await this.pool!.query(`DESCRIBE ${ident}`);
       const colRows = colRowsRaw as Record<string, unknown>[];
       const columns: TableColumn[] = colRows.map((row) => ({
         name: row["Field"] as string,
@@ -157,7 +159,7 @@ export class MySQLAdapter implements DatabaseAdapter {
       }));
 
       // 索引信息
-      const [idxRowsRaw] = await this.pool!.query(`SHOW INDEX FROM \`${table}\``);
+      const [idxRowsRaw] = await this.pool!.query(`SHOW INDEX FROM ${ident}`);
       const idxRows = idxRowsRaw as Record<string, unknown>[];
       const indexMap = new Map<string, TableIndex>();
       for (const row of idxRows) {
@@ -173,6 +175,35 @@ export class MySQLAdapter implements DatabaseAdapter {
       }
 
       return { table, columns, indexes: Array.from(indexMap.values()) };
+    });
+  }
+
+  /** 采样前 N 行数据 */
+  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+    return this.withRetry(async () => {
+      this.ensureConnected();
+      const ident = quoteMysqlIdent(table);
+      const safeLimit = clampLimit(limit);
+      const [rows] = await this.pool!.query(`SELECT * FROM ${ident} LIMIT ${safeLimit}`);
+      return rows as Record<string, unknown>[];
+    });
+  }
+
+  /** 用 information_schema 估算行数(InnoDB 是估算,MyISAM 较精确) */
+  async estimateRowCount(table: string): Promise<TableRowCount> {
+    return this.withRetry(async () => {
+      this.ensureConnected();
+      const [rowsRaw] = await this.pool!.query(
+        "SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+        [table]
+      );
+      const rows = rowsRaw as { TABLE_ROWS: number | string | null }[];
+      if (rows.length === 0) {
+        return { value: null, isEstimate: true };
+      }
+      const raw = rows[0].TABLE_ROWS;
+      const value = raw == null ? null : Number(raw);
+      return { value: Number.isFinite(value as number) ? (value as number) : null, isEstimate: true };
     });
   }
 
@@ -213,7 +244,7 @@ export class MySQLAdapter implements DatabaseAdapter {
   }
 }
 
-/** 判定是否为 MySQL 连接级错误（值得重连重试） */
+/** 判定是否为 MySQL 连接级错误(值得重连重试) */
 function isMysqlConnectionLost(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as { code?: string; message?: string; fatal?: boolean };
@@ -232,4 +263,18 @@ function isMysqlConnectionLost(err: unknown): boolean {
     msg.includes("server has gone away") ||
     msg.includes("can't add new command when connection is in closed state")
   );
+}
+
+/** MySQL 标识符 quote:反引号包裹,内部反引号双写 */
+function quoteMysqlIdent(name: string): string {
+  return "`" + name.replace(/`/g, "``") + "`";
+}
+
+/** 采样行数夹紧到 [0, 20]; 非法值降级为 0 */
+function clampLimit(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  const i = Math.trunc(n);
+  if (i < 0) return 0;
+  if (i > 20) return 20;
+  return i;
 }

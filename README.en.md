@@ -12,6 +12,8 @@ English | [简体中文](./README.md)
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
 - **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
 - **Connection resilience**: TCP keepalive + automatic pool rebuild & retry on connection loss + health-check tool
+- **One-shot table discovery**: `describe_table` returns columns, indexes, estimated row count, and sample rows in a single call — fewer round-trips for the LLM
+- **Latency visibility**: every SQL tool returns `elapsedMs` so the LLM can sense performance and adapt
 - **Unified JSON responses**: Every tool returns structured JSON for easy LLM parsing
 - **Zero deployment**: Single-line `npx` invocation in any MCP client
 
@@ -26,7 +28,7 @@ English | [简体中文](./README.md)
 | `execute` | Run a single write statement (DML, or DDL in `full` mode) | Yes |
 | `transaction` | Run multiple SQLs in a transaction; any failure triggers rollback | Yes |
 | `list_tables` | List all table names in the current connected database | No |
-| `describe_table` | Show column definitions and indexes for a given table | No |
+| `describe_table` | Returns columns, indexes, estimated row count, and sample rows in one call | No |
 | `explain` | Get a SQL execution plan (does not run the original SQL) | No |
 
 ## Permission Modes (PERMISSION_MODE)
@@ -156,7 +158,8 @@ Every tool returns a unified JSON structure.
   "rows": [
     { "id": 1, "name": "Alice" },
     { "id": 2, "name": "Bob" }
-  ]
+  ],
+  "elapsedMs": 3
 }
 ```
 
@@ -168,6 +171,42 @@ Every tool returns a unified JSON structure.
   "error": "Permission mode is readonly; write operations are not allowed."
 }
 ```
+
+## describe_table Enriched Response
+
+`describe_table` accepts an optional `sampleLimit` (default `3`, `0` disables sampling, max `20`). It returns structure, indexes, estimated row count, and sample rows in one shot:
+
+```json
+{
+  "success": true,
+  "table": "users",
+  "columns": [
+    { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null },
+    { "name": "email", "type": "varchar(120)", "nullable": false, "key": "UNI", "extra": "", "defaultValue": null }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uk_email", "columns": ["email"], "unique": true }
+  ],
+  "rowCount": 12453,
+  "rowCountIsEstimate": true,
+  "sampleCount": 3,
+  "sample": [
+    { "id": 1, "email": "alice@example.com" },
+    { "id": 2, "email": "bob@example.com" },
+    { "id": 3, "email": "carol@example.com" }
+  ],
+  "elapsedMs": 12
+}
+```
+
+**Row-count strategy**:
+
+| Database | Source | `rowCountIsEstimate` | Notes |
+|----------|--------|----------------------|-------|
+| MySQL | `information_schema.TABLES.TABLE_ROWS` | `true` | InnoDB estimate; avoids a full-table COUNT(*) |
+| PostgreSQL | `pg_class.reltuples` | `true` | Depends on ANALYZE; `null` if never analyzed |
+| SQLite | `SELECT COUNT(*)` | `false` | Local file, exact value |
 
 ## Transaction Example
 

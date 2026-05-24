@@ -20,12 +20,13 @@ export function registerTransactionTool(server: McpServer, config: AppConfig): v
       },
     },
     async ({ sqls }) => {
+      const startedAt = performance.now();
       try {
-        // 启动事务前逐条校验权限，杜绝半执行状态
+        // 启动事务前逐条校验权限,杜绝半执行状态
         for (let i = 0; i < sqls.length; i++) {
           const check = checkWritePermission(sqls[i], config.permissionMode);
           if (!check.allowed) {
-            return fail(`第 ${i + 1} 条 SQL 被拒绝：${check.reason} 事务未启动。`);
+            return fail(`第 ${i + 1} 条 SQL 被拒绝:${check.reason} 事务未启动。`);
           }
         }
 
@@ -37,6 +38,7 @@ export function registerTransactionTool(server: McpServer, config: AppConfig): v
             mode: config.permissionMode,
             stepCount: result.steps.length,
             steps: result.steps,
+            elapsedMs: Math.round(performance.now() - startedAt),
           });
         }
 

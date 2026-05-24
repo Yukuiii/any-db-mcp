@@ -17,6 +17,7 @@ export function registerExecuteTool(server: McpServer, config: AppConfig): void 
       },
     },
     async ({ sql }) => {
+      const startedAt = performance.now();
       try {
         const check = checkWritePermission(sql, config.permissionMode);
         if (!check.allowed) {
@@ -28,6 +29,7 @@ export function registerExecuteTool(server: McpServer, config: AppConfig): void 
           mode: config.permissionMode,
           affectedRows: result.affectedRows,
           insertId: result.insertId,
+          elapsedMs: Math.round(performance.now() - startedAt),
         });
       } catch (error) {
         return fail(`执行失败: ${errorMessage(error)}`);

@@ -5,6 +5,7 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TableRowCount,
   TransactionResult,
   TransactionStepResult,
 } from "./types.js";
@@ -149,15 +150,15 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     return this.withRetry(async () => {
       this.ensureConnected();
 
-      // 列信息
+      // 列信息(参数化,避免注入)
       const colSql = `
         SELECT column_name, data_type, is_nullable, column_default,
                character_maximum_length, numeric_precision
         FROM information_schema.columns
-        WHERE table_name = '${table}' AND table_schema = 'public'
+        WHERE table_name = $1 AND table_schema = 'public'
         ORDER BY ordinal_position
       `;
-      const colResult = await this.pool!.query(colSql);
+      const colResult = await this.pool!.query(colSql, [table]);
       const columns: TableColumn[] = colResult.rows.map((row) => ({
         name: row.column_name as string,
         type: row.data_type as string,
@@ -176,10 +177,10 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-        WHERE t.relname = '${table}' AND t.relkind = 'r'
+        WHERE t.relname = $1 AND t.relkind = 'r'
         ORDER BY i.relname, a.attnum
       `;
-      const idxResult = await this.pool!.query(idxSql);
+      const idxResult = await this.pool!.query(idxSql, [table]);
       const indexMap = new Map<string, TableIndex>();
       for (const row of idxResult.rows) {
         const name = row.index_name as string;
@@ -199,15 +200,49 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         FROM pg_index ix
         JOIN pg_class t ON t.oid = ix.indrelid
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-        WHERE t.relname = '${table}' AND ix.indisprimary
+        WHERE t.relname = $1 AND ix.indisprimary
       `;
-      const pkResult = await this.pool!.query(pkSql);
+      const pkResult = await this.pool!.query(pkSql, [table]);
       const pkColumns = new Set(pkResult.rows.map((r) => r.column_name as string));
       for (const col of columns) {
         if (pkColumns.has(col.name)) col.key = "PRI";
       }
 
       return { table, columns, indexes: Array.from(indexMap.values()) };
+    });
+  }
+
+  /** 采样前 N 行数据 */
+  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+    return this.withRetry(async () => {
+      this.ensureConnected();
+      const ident = quotePgIdent(table);
+      const safeLimit = clampLimit(limit);
+      const result = await this.pool!.query(`SELECT * FROM ${ident} LIMIT ${safeLimit}`);
+      return result.rows;
+    });
+  }
+
+  /** 用 pg_class.reltuples 估算行数。从未 ANALYZE 时为 -1,返回 null。 */
+  async estimateRowCount(table: string): Promise<TableRowCount> {
+    return this.withRetry(async () => {
+      this.ensureConnected();
+      const sql = `
+        SELECT c.reltuples::bigint AS rows
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = $1 AND n.nspname = 'public' AND c.relkind = 'r'
+      `;
+      const result = await this.pool!.query(sql, [table]);
+      if (result.rows.length === 0) {
+        return { value: null, isEstimate: true };
+      }
+      const raw = result.rows[0].rows;
+      const value = raw == null ? null : Number(raw);
+      if (value == null || !Number.isFinite(value) || value < 0) {
+        return { value: null, isEstimate: true };
+      }
+      return { value, isEstimate: true };
     });
   }
 
@@ -269,4 +304,18 @@ function isPgConnectionLost(err: unknown): boolean {
     msg.includes("client has encountered a connection error") ||
     msg.includes("connection refused")
   );
+}
+
+/** PG 标识符 quote:双引号包裹,内部双引号双写 */
+function quotePgIdent(name: string): string {
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
+/** 采样行数夹紧到 [0, 20] */
+function clampLimit(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  const i = Math.trunc(n);
+  if (i < 0) return 0;
+  if (i > 20) return 20;
+  return i;
 }
