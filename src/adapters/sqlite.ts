@@ -39,6 +39,12 @@ export class SQLiteAdapter implements DatabaseAdapter {
     }
   }
 
+  /** 健康检查：SQLite 是本地文件，跑一条最简单的 pragma 即可 */
+  async ping(): Promise<void> {
+    this.ensureConnected();
+    this.db!.prepare("SELECT 1").get();
+  }
+
   /** 执行只读查询 */
   async query(sql: string): Promise<Record<string, unknown>[]> {
     this.ensureConnected();

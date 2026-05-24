@@ -24,6 +24,11 @@ class DatabaseManager {
     }
   }
 
+  /** 健康检查 */
+  async ping(): Promise<void> {
+    return this.getAdapter().ping();
+  }
+
   /** 获取当前适配器（供 Tools 直接调用适配器方法） */
   getAdapter(): DatabaseAdapter {
     if (!this.adapter) {

@@ -11,6 +11,7 @@
 - **统一适配**：MySQL / PostgreSQL / SQLite 三种数据库共用同一套工具接口
 - **三档权限模式**：`readonly` / `readwrite` / `full`，启动时由环境变量决定，**运行时不可篡改**（5 层防 LLM 提权设计）
 - **事务支持**：单工具批量提交，任一失败自动回滚
+- **连接弹性**：TCP keepalive + 连接丢失自动重建并重试 + 健康检查工具
 - **统一 JSON 响应**：所有工具返回结构化 JSON，便于 LLM 解析
 - **零部署**：通过 `npx` 一行命令即可在任意 MCP 客户端中使用
 
@@ -20,6 +21,7 @@
 |------|------|----------------|
 | `connect` | 动态连接数据库，返回当前数据库的表名列表与权限模式 | 否 |
 | `disconnect` | 主动断开连接并释放连接池（幂等） | 否 |
+| `connection_status` | 查看当前连接状态、ping 健康度与权限模式 | 否 |
 | `query` | 执行只读查询（`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`） | 否 |
 | `execute` | 执行单条写操作（DML，或 `full` 模式下 DDL） | ✓ |
 | `transaction` | 在事务中顺序执行多条 SQL，任一失败回滚 | ✓ |
@@ -198,6 +200,7 @@ src/
     ├── index.ts          所有 Tools 注册入口
     ├── connect.ts        connect 工具
     ├── disconnect.ts     disconnect 工具
+    ├── connection-status.ts connection_status 工具
     ├── query.ts          query 工具
     ├── execute.ts        execute 工具
     ├── transaction.ts    transaction 工具

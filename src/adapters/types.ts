@@ -60,6 +60,9 @@ export interface DatabaseAdapter {
   /** 断开连接 */
   disconnect(): Promise<void>;
 
+  /** 健康检查（发送轻量 SQL 探测连接是否可用） */
+  ping(): Promise<void>;
+
   /** 执行只读查询 */
   query(sql: string): Promise<Record<string, unknown>[]>;
 

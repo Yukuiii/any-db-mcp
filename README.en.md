@@ -11,6 +11,7 @@ English | [简体中文](./README.md)
 - **Unified adapter**: One tool surface for MySQL, PostgreSQL, and SQLite
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
 - **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
+- **Connection resilience**: TCP keepalive + automatic pool rebuild & retry on connection loss + health-check tool
 - **Unified JSON responses**: Every tool returns structured JSON for easy LLM parsing
 - **Zero deployment**: Single-line `npx` invocation in any MCP client
 
@@ -20,6 +21,7 @@ English | [简体中文](./README.md)
 |------|-------------|----------------------------|
 | `connect` | Connect to a database; returns table list and current permission mode | No |
 | `disconnect` | Close current connection and release the pool (idempotent) | No |
+| `connection_status` | Show connection state, ping health, and permission mode | No |
 | `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`) | No |
 | `execute` | Run a single write statement (DML, or DDL in `full` mode) | Yes |
 | `transaction` | Run multiple SQLs in a transaction; any failure triggers rollback | Yes |
@@ -198,6 +200,7 @@ src/
     ├── index.ts          Tool registration entrypoint
     ├── connect.ts        connect tool
     ├── disconnect.ts     disconnect tool
+    ├── connection-status.ts connection_status tool
     ├── query.ts          query tool
     ├── execute.ts        execute tool
     ├── transaction.ts    transaction tool
