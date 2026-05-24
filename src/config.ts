@@ -1,20 +1,33 @@
 import type { DatabaseType } from "./adapters/types.js";
 
-/** 数据库连接配置（支持多种数据库类型） */
+/**
+ * SECURITY: PermissionMode 是权限信任的源头，遵守以下不可逾越的规则：
+ *  1. 只能通过环境变量 PERMISSION_MODE 在 server 启动时一次性设定；
+ *  2. 加载完成后 AppConfig 被 Object.freeze 冻结，运行时任何 MCP 工具都无法修改；
+ *  3. 禁止在 connect/disconnect 或任何工具的 inputSchema 中暴露权限相关字段，
+ *     防止 LLM 在操作被拒后通过"提权式重连"绕过限制。
+ */
+export type PermissionMode = "readonly" | "readwrite" | "full";
+
+/** 合法 mode 集合，用于环境变量校验 */
+export const PERMISSION_MODES: readonly PermissionMode[] = ["readonly", "readwrite", "full"] as const;
+
+/** 数据库连接配置（支持多种数据库类型，启动后不可变） */
 export interface DbConfig {
-  type: DatabaseType;
-  host: string;
-  port: number;
-  user: string;
-  password: string;
-  database: string;
+  readonly type: DatabaseType;
+  readonly host: string;
+  readonly port: number;
+  readonly user: string;
+  readonly password: string;
+  readonly database: string;
   /** SQLite 文件路径 */
-  filepath: string;
+  readonly filepath: string;
 }
 
+/** 应用配置，启动后不可变 */
 export interface AppConfig {
-  db: DbConfig | null;
-  readonlyMode: boolean;
+  readonly db: DbConfig | null;
+  readonly permissionMode: PermissionMode;
 }
 
 /** 各数据库类型的默认端口 */
@@ -24,15 +37,19 @@ const DEFAULT_PORTS: Record<DatabaseType, number> = {
   sqlite: 0,
 };
 
-/** 从环境变量加载应用配置，数据库连接信息可选 */
+/**
+ * 从环境变量加载应用配置。数据库连接信息可选。
+ * 返回的对象被 Object.freeze 深冻结，任何修改都会在严格模式下抛错，
+ * 防止运行时被 MCP 工具或其它代码改写 permissionMode 等关键字段。
+ */
 export function loadConfig(): AppConfig {
   const hasDbConfig = process.env.DB_HOST || process.env.DB_USER || process.env.DB_FILEPATH;
   const dbType = (process.env.DB_TYPE as DatabaseType) || "mysql";
   const defaultPort = DEFAULT_PORTS[dbType] || 3306;
 
-  return {
+  const config: AppConfig = {
     db: hasDbConfig
-      ? {
+      ? Object.freeze({
           type: dbType,
           host: process.env.DB_HOST || "localhost",
           port: parseInt(process.env.DB_PORT || String(defaultPort), 10),
@@ -40,8 +57,23 @@ export function loadConfig(): AppConfig {
           password: process.env.DB_PASSWORD || "",
           database: process.env.DB_NAME || "",
           filepath: process.env.DB_FILEPATH || "",
-        }
+        })
       : null,
-    readonlyMode: process.env.READONLY_MODE === "true",
+    permissionMode: parsePermissionMode(process.env.PERMISSION_MODE),
   };
+
+  return Object.freeze(config);
+}
+
+/** 解析权限模式，非法值降级到 readwrite 并打 warning */
+function parsePermissionMode(value: string | undefined): PermissionMode {
+  if (!value) return "readwrite";
+  const normalized = value.toLowerCase() as PermissionMode;
+  if (PERMISSION_MODES.includes(normalized)) {
+    return normalized;
+  }
+  console.error(
+    `[any-db-mcp] 非法的 PERMISSION_MODE="${value}"，已降级到默认值 "readwrite"。合法值：${PERMISSION_MODES.join(" | ")}`
+  );
+  return "readwrite";
 }

@@ -1,4 +1,9 @@
-import type { DatabaseAdapter, ExecuteResult, TableDescription } from "./adapters/types.js";
+import type {
+  DatabaseAdapter,
+  ExecuteResult,
+  TableDescription,
+  TransactionResult,
+} from "./adapters/types.js";
 
 /** 数据库管理器，持有当前 Adapter 实例，支持动态切换 */
 class DatabaseManager {
@@ -34,24 +39,29 @@ class DatabaseManager {
     return this.getAdapter().query(sql);
   }
 
+  /** 获取 SQL 的执行计划 */
+  async explain(sql: string): Promise<Record<string, unknown>[]> {
+    return this.getAdapter().explain(sql);
+  }
+
   /** 执行数据修改 */
   async execute(sql: string): Promise<ExecuteResult> {
     return this.getAdapter().execute(sql);
   }
 
-  /** 列出所有表 */
-  async listTables(database?: string): Promise<string[]> {
-    return this.getAdapter().listTables(database);
+  /** 在事务中顺序执行多条 SQL */
+  async transaction(sqls: string[]): Promise<TransactionResult> {
+    return this.getAdapter().transaction(sqls);
+  }
+
+  /** 列出当前连接数据库的所有表 */
+  async listTables(): Promise<string[]> {
+    return this.getAdapter().listTables();
   }
 
   /** 查看表结构 */
   async describeTable(table: string): Promise<TableDescription> {
     return this.getAdapter().describeTable(table);
-  }
-
-  /** 列出所有数据库 */
-  async listDatabases(): Promise<string[]> {
-    return this.getAdapter().listDatabases();
   }
 
   /** 检查是否已连接 */

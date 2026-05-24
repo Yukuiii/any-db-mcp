@@ -1,5 +1,5 @@
 {
-  "name": "any-db-mcp",
+  "name": "@sakura0v0/any-db-mcp",
   "version": "1.0.0",
   "description": "MCP Server for MySQL, PostgreSQL and SQLite database operations",
   "type": "module",
@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "README.en.md"
   ],
   "scripts": {
     "build": "tsc",

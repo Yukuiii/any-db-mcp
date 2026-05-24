@@ -5,6 +5,8 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TransactionResult,
+  TransactionStepResult,
 } from "./types.js";
 
 /** SQLite 连接配置 */
@@ -43,6 +45,12 @@ export class SQLiteAdapter implements DatabaseAdapter {
     return this.db!.prepare(sql).all() as Record<string, unknown>[];
   }
 
+  /** 获取执行计划（SQLite 用 EXPLAIN QUERY PLAN，比 EXPLAIN 输出更易读） */
+  async explain(sql: string): Promise<Record<string, unknown>[]> {
+    this.ensureConnected();
+    return this.db!.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as Record<string, unknown>[];
+  }
+
   /** 执行修改语句 */
   async execute(sql: string): Promise<ExecuteResult> {
     this.ensureConnected();
@@ -51,6 +59,39 @@ export class SQLiteAdapter implements DatabaseAdapter {
       affectedRows: result.changes,
       insertId: Number(result.lastInsertRowid),
     };
+  }
+
+  /** 在事务中顺序执行多条 SQL（手动 BEGIN/COMMIT/ROLLBACK，统一错误结构） */
+  async transaction(sqls: string[]): Promise<TransactionResult> {
+    this.ensureConnected();
+    const steps: TransactionStepResult[] = [];
+    this.db!.exec("BEGIN");
+    for (let i = 0; i < sqls.length; i++) {
+      const sql = sqls[i];
+      try {
+        const result = this.db!.prepare(sql).run();
+        steps.push({
+          index: i,
+          sql,
+          affectedRows: result.changes,
+          insertId: Number(result.lastInsertRowid),
+        });
+      } catch (err) {
+        try {
+          this.db!.exec("ROLLBACK");
+        } catch {
+          // 回滚失败也吞掉，原始错误更重要
+        }
+        return {
+          committed: false,
+          steps,
+          failedAt: i,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+    this.db!.exec("COMMIT");
+    return { committed: true, steps, failedAt: null, error: null };
   }
 
   /** 列出所有表 */
@@ -107,13 +148,6 @@ export class SQLiteAdapter implements DatabaseAdapter {
     }
 
     return { table, columns, indexes };
-  }
-
-  /** 列出已附加的数据库 */
-  async listDatabases(): Promise<string[]> {
-    this.ensureConnected();
-    const rows = this.db!.prepare("PRAGMA database_list").all() as { name: string }[];
-    return rows.map((r) => r.name);
   }
 
   private ensureConnected(): void {

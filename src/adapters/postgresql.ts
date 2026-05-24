@@ -5,6 +5,8 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TransactionResult,
+  TransactionStepResult,
 } from "./types.js";
 
 /** PostgreSQL 连接配置 */
@@ -57,6 +59,13 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     return result.rows;
   }
 
+  /** 获取执行计划（不带 ANALYZE，不实际执行 SQL） */
+  async explain(sql: string): Promise<Record<string, unknown>[]> {
+    this.ensureConnected();
+    const result = await this.pool!.query(`EXPLAIN ${sql}`);
+    return result.rows;
+  }
+
   /** 执行修改语句 */
   async execute(sql: string): Promise<ExecuteResult> {
     this.ensureConnected();
@@ -64,14 +73,47 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     return { affectedRows: result.rowCount ?? 0, insertId: 0 };
   }
 
-  /** 列出所有表（默认 public schema） */
-  async listTables(schema?: string): Promise<string[]> {
+  /** 在事务中顺序执行多条 SQL */
+  async transaction(sqls: string[]): Promise<TransactionResult> {
     this.ensureConnected();
-    const targetSchema = schema || "public";
+    const client = await this.pool!.connect();
+    const steps: TransactionStepResult[] = [];
+    try {
+      await client.query("BEGIN");
+      for (let i = 0; i < sqls.length; i++) {
+        const sql = sqls[i];
+        try {
+          const result = await client.query(sql);
+          steps.push({
+            index: i,
+            sql,
+            affectedRows: result.rowCount ?? 0,
+            insertId: 0,
+          });
+        } catch (err) {
+          await client.query("ROLLBACK");
+          return {
+            committed: false,
+            steps,
+            failedAt: i,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+      await client.query("COMMIT");
+      return { committed: true, steps, failedAt: null, error: null };
+    } finally {
+      client.release();
+    }
+  }
+
+  /** 列出当前连接库（默认 public schema）下的所有表 */
+  async listTables(): Promise<string[]> {
+    this.ensureConnected();
     const sql = `
       SELECT table_name
       FROM information_schema.tables
-      WHERE table_schema = '${targetSchema}' AND table_type = 'BASE TABLE'
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
       ORDER BY table_name
     `;
     const rows = await this.query(sql);
@@ -141,14 +183,6 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     }
 
     return { table, columns, indexes: Array.from(indexMap.values()) };
-  }
-
-  /** 列出所有数据库 */
-  async listDatabases(): Promise<string[]> {
-    this.ensureConnected();
-    const sql = "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname";
-    const rows = await this.query(sql);
-    return rows.map((row) => row.datname as string);
   }
 
   private ensureConnected(): void {

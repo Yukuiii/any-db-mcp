@@ -1,18 +1,22 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AppConfig } from "../config.js";
 import { registerConnectTool } from "./connect.js";
+import { registerDisconnectTool } from "./disconnect.js";
 import { registerQueryTool } from "./query.js";
 import { registerExecuteTool } from "./execute.js";
+import { registerTransactionTool } from "./transaction.js";
 import { registerListTablesTool } from "./list-tables.js";
 import { registerDescribeTableTool } from "./describe-table.js";
-import { registerListDatabasesTool } from "./list-databases.js";
+import { registerExplainTool } from "./explain.js";
 
 /** 注册所有 MCP Tools 到 Server 实例 */
 export function registerTools(server: McpServer, config: AppConfig): void {
-  registerConnectTool(server);
+  registerConnectTool(server, config);
+  registerDisconnectTool(server);
   registerQueryTool(server);
   registerExecuteTool(server, config);
+  registerTransactionTool(server, config);
   registerListTablesTool(server);
   registerDescribeTableTool(server);
-  registerListDatabasesTool(server);
+  registerExplainTool(server);
 }

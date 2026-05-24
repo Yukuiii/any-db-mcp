@@ -5,6 +5,8 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TransactionResult,
+  TransactionStepResult,
 } from "./types.js";
 
 /** MySQL 连接配置 */
@@ -59,6 +61,13 @@ export class MySQLAdapter implements DatabaseAdapter {
     return rows as Record<string, unknown>[];
   }
 
+  /** 获取执行计划（MySQL EXPLAIN，不实际执行 SQL） */
+  async explain(sql: string): Promise<Record<string, unknown>[]> {
+    this.ensureConnected();
+    const [rows] = await this.pool!.query(`EXPLAIN ${sql}`);
+    return rows as Record<string, unknown>[];
+  }
+
   /** 执行修改语句 */
   async execute(sql: string): Promise<ExecuteResult> {
     this.ensureConnected();
@@ -67,13 +76,45 @@ export class MySQLAdapter implements DatabaseAdapter {
     return { affectedRows: res.affectedRows, insertId: res.insertId };
   }
 
-  /** 列出所有表 */
-  async listTables(database?: string): Promise<string[]> {
+  /** 在事务中顺序执行多条 SQL */
+  async transaction(sqls: string[]): Promise<TransactionResult> {
     this.ensureConnected();
-    const sql = database
-      ? `SHOW TABLES FROM \`${database}\``
-      : "SHOW TABLES";
-    const rows = await this.query(sql);
+    const conn = await this.pool!.getConnection();
+    const steps: TransactionStepResult[] = [];
+    try {
+      await conn.beginTransaction();
+      for (let i = 0; i < sqls.length; i++) {
+        const sql = sqls[i];
+        try {
+          const [result] = await conn.query(sql);
+          const res = result as mysql.ResultSetHeader;
+          steps.push({
+            index: i,
+            sql,
+            affectedRows: res.affectedRows ?? 0,
+            insertId: res.insertId ?? 0,
+          });
+        } catch (err) {
+          await conn.rollback();
+          return {
+            committed: false,
+            steps,
+            failedAt: i,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+      await conn.commit();
+      return { committed: true, steps, failedAt: null, error: null };
+    } finally {
+      conn.release();
+    }
+  }
+
+  /** 列出当前连接数据库的所有表 */
+  async listTables(): Promise<string[]> {
+    this.ensureConnected();
+    const rows = await this.query("SHOW TABLES");
     return rows.map((row) => Object.values(row)[0] as string);
   }
 
@@ -108,13 +149,6 @@ export class MySQLAdapter implements DatabaseAdapter {
     }
 
     return { table, columns, indexes: Array.from(indexMap.values()) };
-  }
-
-  /** 列出所有数据库 */
-  async listDatabases(): Promise<string[]> {
-    this.ensureConnected();
-    const rows = await this.query("SHOW DATABASES");
-    return rows.map((row) => Object.values(row)[0] as string);
   }
 
   private ensureConnected(): void {

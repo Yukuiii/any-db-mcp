@@ -1,0 +1,214 @@
+# any-db-mcp
+
+English | [简体中文](./README.md)
+
+> An MCP (Model Context Protocol) server that lets LLMs safely operate on databases. Supports **MySQL / PostgreSQL / SQLite**.
+
+[![npm version](https://img.shields.io/npm/v/@sakura0v0/any-db-mcp.svg)](https://www.npmjs.com/package/@sakura0v0/any-db-mcp)
+
+## Features
+
+- **Unified adapter**: One tool surface for MySQL, PostgreSQL, and SQLite
+- **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
+- **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
+- **Unified JSON responses**: Every tool returns structured JSON for easy LLM parsing
+- **Zero deployment**: Single-line `npx` invocation in any MCP client
+
+## Tools Overview
+
+| Tool | Description | Subject to permission mode |
+|------|-------------|----------------------------|
+| `connect` | Connect to a database; returns table list and current permission mode | No |
+| `disconnect` | Close current connection and release the pool (idempotent) | No |
+| `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`) | No |
+| `execute` | Run a single write statement (DML, or DDL in `full` mode) | Yes |
+| `transaction` | Run multiple SQLs in a transaction; any failure triggers rollback | Yes |
+| `list_tables` | List all table names in the current connected database | No |
+| `describe_table` | Show column definitions and indexes for a given table | No |
+| `explain` | Get a SQL execution plan (does not run the original SQL) | No |
+
+## Permission Modes (PERMISSION_MODE)
+
+| Mode | `query` | `execute` / `transaction` | DDL | Use case |
+|------|---------|----------------------------|-----|----------|
+| `readonly` | ✓ | ✗ | ✗ | Production queries, data exploration |
+| `readwrite` ⭐default | ✓ | ✓ DML (INSERT/UPDATE/DELETE) | ✗ | Regular business operations |
+| `full` | ✓ | ✓ DML + DDL | ✓ | Migrations, initialization, schema evolution |
+
+> **Security guarantee**: `PERMISSION_MODE` can only be set via environment variable at server startup. `AppConfig` is deep-frozen with `Object.freeze` after loading, and no tool's `inputSchema` exposes any permission-related fields. This prevents the LLM from escalating privileges via reconnection or any runtime path.
+
+## Quick Start
+
+### Via npx (recommended)
+
+Add to your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "any-db-mcp": {
+      "command": "npx",
+      "args": ["-y", "@sakura0v0/any-db-mcp"],
+      "env": {
+        "PERMISSION_MODE": "readwrite",
+        "DB_TYPE": "mysql",
+        "DB_HOST": "localhost",
+        "DB_PORT": "3306",
+        "DB_USER": "root",
+        "DB_PASSWORD": "your_password",
+        "DB_NAME": "your_database"
+      }
+    }
+  }
+}
+```
+
+### Build from source
+
+```bash
+npm install
+npm run build
+node dist/index.js
+```
+
+Corresponding MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "any-db-mcp": {
+      "command": "node",
+      "args": ["/absolute/path/to/any-db-mcp/dist/index.js"],
+      "env": {
+        "PERMISSION_MODE": "readwrite"
+      }
+    }
+  }
+}
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PERMISSION_MODE` | Permission mode: `readonly` / `readwrite` / `full` | `readwrite` |
+| `DB_TYPE` | Database type: `mysql` / `postgresql` / `sqlite` | `mysql` |
+| `DB_HOST` | Database host | `localhost` |
+| `DB_PORT` | Database port | `3306` (MySQL) / `5432` (PG) |
+| `DB_USER` | Database user | `root` |
+| `DB_PASSWORD` | Database password | (empty) |
+| `DB_NAME` | Default database | (empty) |
+| `DB_FILEPATH` | SQLite database file path | (empty) |
+
+> When no `DB_*` vars are set, the server starts without connecting. The LLM must call the `connect` tool explicitly.
+
+## Connection Examples
+
+Example inputs the LLM passes to the `connect` tool:
+
+### MySQL
+
+```json
+{
+  "type": "mysql",
+  "host": "localhost",
+  "port": 3306,
+  "user": "root",
+  "password": "xxx",
+  "database": "mydb"
+}
+```
+
+### PostgreSQL
+
+```json
+{
+  "type": "postgresql",
+  "host": "localhost",
+  "port": 5432,
+  "user": "postgres",
+  "password": "xxx",
+  "database": "mydb"
+}
+```
+
+### SQLite
+
+```json
+{
+  "type": "sqlite",
+  "filepath": "/path/to/database.db"
+}
+```
+
+## Response Format
+
+Every tool returns a unified JSON structure.
+
+**Success**:
+
+```json
+{
+  "success": true,
+  "rowCount": 2,
+  "rows": [
+    { "id": 1, "name": "Alice" },
+    { "id": 2, "name": "Bob" }
+  ]
+}
+```
+
+**Failure** (MCP also sets `isError: true` at the protocol layer):
+
+```json
+{
+  "success": false,
+  "error": "Permission mode is readonly; write operations are not allowed."
+}
+```
+
+## Transaction Example
+
+LLM calls the `transaction` tool:
+
+```json
+{
+  "sqls": [
+    "UPDATE accounts SET balance = balance - 100 WHERE user_id = 1",
+    "UPDATE accounts SET balance = balance + 100 WHERE user_id = 2"
+  ]
+}
+```
+
+If any statement fails, the transaction auto-rolls back and all changes are undone.
+
+## Architecture
+
+```
+src/
+├── index.ts              Entry: load config → register tools → optional auto-connect → start stdio
+├── config.ts             AppConfig and PermissionMode (frozen at load, immutable at runtime)
+├── db.ts                 DatabaseManager singleton holding the active Adapter
+├── adapters/
+│   ├── types.ts          Unified DatabaseAdapter interface
+│   ├── mysql.ts          mysql2/promise pool implementation
+│   ├── postgresql.ts     pg pool implementation
+│   └── sqlite.ts         better-sqlite3 implementation
+└── tools/
+    ├── index.ts          Tool registration entrypoint
+    ├── connect.ts        connect tool
+    ├── disconnect.ts     disconnect tool
+    ├── query.ts          query tool
+    ├── execute.ts        execute tool
+    ├── transaction.ts    transaction tool
+    ├── list-tables.ts    list_tables tool
+    ├── describe-table.ts describe_table tool
+    ├── explain.ts        explain tool
+    ├── permission.ts     Permission check helper
+    ├── response.ts       Unified response factory: ok() / fail()
+    └── sql-patterns.ts   SQL-type regexes
+```
+
+## License
+
+MIT

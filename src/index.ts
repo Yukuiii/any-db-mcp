@@ -22,6 +22,8 @@ async function main(): Promise<void> {
   // 注册所有 Tools
   registerTools(server, config);
 
+  console.error(`[any-db-mcp] 权限模式: ${config.permissionMode}`);
+
   // 如果环境变量中配置了数据库连接信息，自动连接
   if (config.db) {
     try {
@@ -30,22 +32,32 @@ async function main(): Promise<void> {
       const label = config.db.type === "sqlite"
         ? `SQLite (${config.db.filepath})`
         : `${config.db.type} ${config.db.host}:${config.db.port}`;
-      console.error(`[db-mcp] 已通过环境变量连接到 ${label}`);
+      console.error(`[any-db-mcp] 已通过环境变量连接到 ${label}`);
+
+      // 输出表数量概览（失败不影响启动）
+      try {
+        const tables = await db.listTables();
+        console.error(`[any-db-mcp] 当前数据库共 ${tables.length} 张表`);
+      } catch (error) {
+        console.error(
+          `[any-db-mcp] 表列表获取失败（不影响连接）: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     } catch (error) {
       console.error(
-        `[db-mcp] 环境变量数据库连接失败: ${error instanceof Error ? error.message : String(error)}`
+        `[any-db-mcp] 环境变量数据库连接失败: ${error instanceof Error ? error.message : String(error)}`
       );
-      console.error("[db-mcp] 可通过 connect 工具手动连接数据库");
+      console.error("[any-db-mcp] 可通过 connect 工具手动连接数据库");
     }
   } else {
-    console.error("[db-mcp] 未配置数据库连接信息，请通过 connect 工具连接数据库");
+    console.error("[any-db-mcp] 未配置数据库连接信息，请通过 connect 工具连接数据库");
   }
 
   // 使用 stdio 传输协议
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("[db-mcp] MCP Server 已启动 (stdio)");
+  console.error("[any-db-mcp] MCP Server 已启动 (stdio)");
 
   // 优雅退出：销毁连接池
   process.on("SIGINT", async () => {
@@ -85,6 +97,6 @@ function createAdapterFromConfig(config: DbConfig) {
 }
 
 main().catch((error) => {
-  console.error("[db-mcp] 启动失败:", error);
+  console.error("[any-db-mcp] 启动失败:", error);
   process.exit(1);
 });

@@ -1,40 +1,24 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
 import { db } from "../db.js";
+import { ok, fail, errorMessage } from "./response.js";
 
-/** list_tables — 列出指定数据库中的所有表 */
+/** list_tables — 列出当前连接数据库的所有表名 */
 export function registerListTablesTool(server: McpServer): void {
   server.registerTool(
     "list_tables",
     {
-      description: "列出数据库中的所有表。可指定数据库名/schema，不指定则使用默认值。",
-      inputSchema: {
-        database: z.string().optional().describe("数据库名或 schema（可选，默认使用当前数据库）"),
-      },
+      description:
+        "列出当前连接数据库的所有表名。基于 connect 工具建立的连接（MySQL 当前 database / PostgreSQL public schema / SQLite 当前文件）。如需查看其他数据库或 schema，请使用 query 工具直接执行相应 SQL。",
     },
-    async ({ database }) => {
+    async () => {
       try {
-        const tables = await db.listTables(database);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: tables.length > 0
-                ? `共 ${tables.length} 张表:\n${tables.join("\n")}`
-                : "当前数据库中没有表。",
-            },
-          ],
-        };
+        const tables = await db.listTables();
+        return ok({
+          tableCount: tables.length,
+          tables,
+        });
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `❌ 获取表列表失败: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
+        return fail(`获取表列表失败: ${errorMessage(error)}`);
       }
     }
   );

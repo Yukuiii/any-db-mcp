@@ -31,6 +31,24 @@ export interface ExecuteResult {
   insertId: number;
 }
 
+/** 事务中单条语句的执行结果 */
+export interface TransactionStepResult {
+  index: number;
+  sql: string;
+  affectedRows: number;
+  insertId: number;
+}
+
+/** 事务整体执行结果。失败时 committed=false，failedAt/error 给出诊断信息。 */
+export interface TransactionResult {
+  committed: boolean;
+  steps: TransactionStepResult[];
+  /** 失败时第几条 SQL 出错（0-based），成功为 null */
+  failedAt: number | null;
+  /** 失败原因，成功为 null */
+  error: string | null;
+}
+
 /** 数据库适配器接口，统一三种数据库的操作契约 */
 export interface DatabaseAdapter {
   /** 数据库类型标识 */
@@ -45,15 +63,18 @@ export interface DatabaseAdapter {
   /** 执行只读查询 */
   query(sql: string): Promise<Record<string, unknown>[]>;
 
+  /** 获取 SQL 的执行计划（适配器内部负责拼接 EXPLAIN/EXPLAIN QUERY PLAN 前缀） */
+  explain(sql: string): Promise<Record<string, unknown>[]>;
+
   /** 执行数据修改语句 */
   execute(sql: string): Promise<ExecuteResult>;
 
-  /** 列出所有表 */
-  listTables(database?: string): Promise<string[]>;
+  /** 在事务中顺序执行多条 SQL；任一失败则回滚 */
+  transaction(sqls: string[]): Promise<TransactionResult>;
+
+  /** 列出当前连接数据库的所有表 */
+  listTables(): Promise<string[]>;
 
   /** 查看表结构 */
   describeTable(table: string): Promise<TableDescription>;
-
-  /** 列出所有数据库/schema */
-  listDatabases(): Promise<string[]>;
 }

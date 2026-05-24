@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "../db.js";
 import { READONLY_SQL_PATTERN } from "./sql-patterns.js";
+import { ok, fail, errorMessage } from "./response.js";
 
 /** query — 执行只读 SQL 查询 */
 export function registerQueryTool(server: McpServer): void {
@@ -15,38 +16,16 @@ export function registerQueryTool(server: McpServer): void {
     },
     async ({ sql }) => {
       try {
-        // 安全校验：仅允许只读语句
         if (!READONLY_SQL_PATTERN.test(sql)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "❌ query 工具仅支持 SELECT / SHOW / DESCRIBE / EXPLAIN 语句。如需执行写操作，请使用 execute 工具。",
-              },
-            ],
-            isError: true,
-          };
+          return fail(
+            "query 工具仅支持 SELECT / SHOW / DESCRIBE / EXPLAIN 语句。如需执行写操作，请使用 execute 工具。"
+          );
         }
 
         const rows = await db.query(sql);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(rows, null, 2),
-            },
-          ],
-        };
+        return ok({ rowCount: rows.length, rows });
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `❌ 查询失败: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
+        return fail(`查询失败: ${errorMessage(error)}`);
       }
     }
   );
