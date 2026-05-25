@@ -42,7 +42,7 @@ describe("SQL keyword patterns", () => {
     assert.equal(READONLY_SQL_PATTERN.test("SELECT * FROM users"), true);
     assert.equal(READONLY_SQL_PATTERN.test(" show tables"), true);
     assert.equal(READONLY_SQL_PATTERN.test("DESCRIBE users"), true);
-    assert.equal(READONLY_SQL_PATTERN.test("EXPLAIN SELECT 1"), true);
+    assert.equal(READONLY_SQL_PATTERN.test("EXPLAIN SELECT 1"), false);
     assert.equal(READONLY_SQL_PATTERN.test("INSERT INTO users VALUES (1)"), false);
   });
 

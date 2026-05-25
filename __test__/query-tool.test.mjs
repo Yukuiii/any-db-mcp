@@ -12,12 +12,15 @@ function parseToolJson(response) {
 
 /** 创建只实现 query 路径所需行为的内存数据库适配器。 */
 function createQueryOnlyAdapter(rows) {
+  const state = { queryCount: 0 };
   return {
     type: "sqlite",
+    state,
     async connect() {},
     async disconnect() {},
     async ping() {},
     async query() {
+      state.queryCount += 1;
       return rows;
     },
     async explain() {
@@ -107,5 +110,19 @@ describe("query tool", () => {
     assert.equal(response.isError, true);
     assert.equal(body.success, false);
     assert.match(body.error, /超时/);
+  });
+
+  test("拒绝 EXPLAIN 并引导使用 explain 工具", async () => {
+    const adapter = createQueryOnlyAdapter([]);
+    await db.connectWith(adapter);
+    const handler = createRegisteredQueryHandler();
+
+    const response = await handler({ sql: "EXPLAIN SELECT * FROM users" });
+    const body = parseToolJson(response);
+
+    assert.equal(response.isError, true);
+    assert.equal(body.success, false);
+    assert.match(body.error, /explain 工具/);
+    assert.equal(adapter.state.queryCount, 0);
   });
 });

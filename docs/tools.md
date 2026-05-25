@@ -32,7 +32,7 @@
 
 ### query
 
-执行只读 SQL 查询。仅允许 `SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN` 开头语句。响应最多返回前 1000 行，`limit` 字段会明确告知本次返回上限；超过 `QUERY_TIMEOUT_MS` 会返回超时错误。
+执行只读 SQL 查询。仅允许 `SELECT` / `SHOW` / `DESCRIBE` 开头语句。响应最多返回前 1000 行，`limit` 字段会明确告知本次返回上限；超过 `QUERY_TIMEOUT_MS` 会返回超时错误。执行计划请使用 `explain` 工具。
 
 | 参数 | 类型 | 说明 |
 |------|------|------|

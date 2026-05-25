@@ -26,7 +26,7 @@ English | [简体中文](./README.md)
 | `connect` | Connect to a database; returns table list and current permission mode | No |
 | `disconnect` | Close current connection and release the pool (idempotent) | No |
 | `connection_status` | Show connection state, ping health, and permission mode | No |
-| `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`), returning at most the first 1000 rows | No |
+| `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE`), returning at most the first 1000 rows | No |
 | `execute` | Run a single write statement (DML, or DDL in `full` mode) | Yes |
 | `transaction` | Run multiple SQLs in a transaction; any failure triggers rollback | Yes |
 | `list_tables` | List all table names in the current connected database | No |

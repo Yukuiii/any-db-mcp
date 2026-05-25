@@ -13,7 +13,7 @@ export function registerQueryTool(server: McpServer, config: AppConfig): void {
     "query",
     {
       description:
-        "执行只读 SQL 查询(SELECT / SHOW / DESCRIBE / EXPLAIN)。响应最多返回前 1000 行,并通过 limit 字段告知本次返回上限;超过 QUERY_TIMEOUT_MS 会失败。",
+        "执行只读 SQL 查询(SELECT / SHOW / DESCRIBE)。响应最多返回前 1000 行,并通过 limit 字段告知本次返回上限;超过 QUERY_TIMEOUT_MS 会失败。执行计划请使用 explain 工具。",
       inputSchema: {
         sql: z.string().describe("要执行的 SQL 查询语句"),
       },
@@ -27,7 +27,7 @@ export function registerQueryTool(server: McpServer, config: AppConfig): void {
         }
         if (!READONLY_SQL_PATTERN.test(sql)) {
           return fail(
-            "query 工具仅支持 SELECT / SHOW / DESCRIBE / EXPLAIN 语句。如需执行写操作,请使用 execute 工具。"
+            "query 工具仅支持 SELECT / SHOW / DESCRIBE 语句。执行计划请使用 explain 工具;如需执行写操作,请使用 execute 工具。"
           );
         }
 
