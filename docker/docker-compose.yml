@@ -1,0 +1,26 @@
+services:
+  # HTTP 模式 — 远程访问、多人共享
+  any-db-mcp:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${MCP_HTTP_PORT:-3000}:3000"
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_HTTP_HOST=0.0.0.0
+      - MCP_HTTP_PORT=3000
+      - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
+      - PERMISSION_MODE=${PERMISSION_MODE:-readwrite}
+      - DB_TYPE=${DB_TYPE:-mysql}
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-root}
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - DB_NAME=${DB_NAME:-}
+      - DB_ENCRYPT=${DB_ENCRYPT:-true}
+      - DB_TRUST_SERVER_CERTIFICATE=${DB_TRUST_SERVER_CERTIFICATE:-false}
+    restart: unless-stopped
+    # 用 .env 文件管理环境变量:
+    # env_file: .env
