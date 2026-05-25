@@ -31,6 +31,7 @@
 | `transaction` | 在事务中顺序执行多条 SQL，任一失败回滚 | ✓ |
 | `list_tables` | 列出当前连接数据库的所有表名 | 否 |
 | `describe_table` | 一次返回指定表的列定义、索引、估算行数与数据采样 | 否 |
+| `search_schema` | 按关键词搜索表名、列名和字段类型 | 否 |
 | `explain` | 获取 SQL 执行计划（不实际执行原 SQL），辅助优化 | 否 |
 
 ## 权限模式（PERMISSION_MODE）
@@ -107,6 +108,7 @@ node dist/index.js
 | `DB_FILEPATH` | SQLite 数据库文件路径 | （空） |
 | `DB_ENCRYPT` | 仅 MSSQL：是否启用 TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | 仅 MSSQL：是否信任自签证书 | `false` |
+| `QUERY_TIMEOUT_MS` | `query` 工具响应超时时间（ms） | `30000` |
 | `MCP_TRANSPORT` | 传输方式:`stdio`(默认) / `http` | `stdio` |
 | `MCP_HTTP_HOST` | 仅 http:监听主机,公网暴露请显式设 `0.0.0.0` 并配 token | `127.0.0.1` |
 | `MCP_HTTP_PORT` | 仅 http:监听端口 | `3000` |
@@ -216,6 +218,7 @@ npx @sakura0v0/any-db-mcp
   "rowCount": 2,
   "limit": 1000,
   "truncated": false,
+  "timeoutMs": 30000,
   "rows": [
     { "id": 1, "name": "Alice" },
     { "id": 2, "name": "Bob" }
@@ -230,6 +233,16 @@ npx @sakura0v0/any-db-mcp
 {
   "success": false,
   "error": "当前权限模式为 readonly，禁止任何写操作。"
+}
+```
+
+## search_schema 快速定位
+
+`search_schema` 可按关键词搜索当前库的表名、列名和字段类型，适合大库中先定位相关表字段再调用 `describe_table`。响应最多返回前 50 个命中项，并带 `failedTables` 说明个别表结构读取失败的情况。
+
+```json
+{
+  "keyword": "email"
 }
 ```
 
@@ -325,6 +338,7 @@ src/
     ├── transaction.ts    transaction 工具
     ├── list-tables.ts    list_tables 工具
     ├── describe-table.ts describe_table 工具
+    ├── search-schema.ts  search_schema 工具
     ├── explain.ts        explain 工具
     ├── resources.ts      MCP Resources(db://tables + db://table/{name})
     ├── permission.ts     权限检查 helper

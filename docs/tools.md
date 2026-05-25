@@ -32,13 +32,13 @@
 
 ### query
 
-执行只读 SQL 查询。仅允许 `SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN` 开头语句。响应最多返回前 1000 行，`limit` 字段会明确告知本次返回上限。
+执行只读 SQL 查询。仅允许 `SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN` 开头语句。响应最多返回前 1000 行，`limit` 字段会明确告知本次返回上限；超过 `QUERY_TIMEOUT_MS` 会返回超时错误。
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | sql | string | 要执行的 SQL 查询语句 |
 
-返回：`rowCount`、`limit`、`truncated`、`rows`、`elapsedMs`。
+返回：`rowCount`、`limit`、`truncated`、`timeoutMs`、`rows`、`elapsedMs`。
 
 安全约束：拦截多语句，拦截非只读 SQL。
 
@@ -58,6 +58,18 @@
 | sampleLimit | number | 否 | 采样行数，默认 3，0 不采样，最大 20 |
 
 返回：`table`、`columns`、`indexes`、`foreignKeys`、`rowCount`、`rowCountIsEstimate`、`sampleCount`、`sample`、`elapsedMs`。
+
+### search_schema
+
+按关键词搜索当前数据库 schema，匹配表名、列名和字段类型。适合大库中快速定位相关表或字段。
+
+| 参数 | 类型 | 必需 | 说明 |
+|------|------|:---:|------|
+| keyword | string | 是 | 搜索关键词，大小写不敏感 |
+
+返回：`keyword`、`scannedTableCount`、`matchCount`、`totalMatchCount`、`limit`、`truncated`、`matches`、`failedTableCount`、`failedTables`、`elapsedMs`。
+
+单个表结构读取失败不会让整个搜索失败，会记录到 `failedTables` 并继续搜索其他表。
 
 ### explain
 

@@ -8,6 +8,7 @@ import { registerExecuteTool } from "./execute.js";
 import { registerTransactionTool } from "./transaction.js";
 import { registerListTablesTool } from "./list-tables.js";
 import { registerDescribeTableTool } from "./describe-table.js";
+import { registerSearchSchemaTool } from "./search-schema.js";
 import { registerExplainTool } from "./explain.js";
 import { registerResources } from "../resources.js";
 
@@ -16,11 +17,12 @@ export function registerTools(server: McpServer, config: AppConfig): void {
   registerConnectTool(server, config);
   registerDisconnectTool(server);
   registerConnectionStatusTool(server, config);
-  registerQueryTool(server);
+  registerQueryTool(server, config);
   registerExecuteTool(server, config);
   registerTransactionTool(server, config);
   registerListTablesTool(server);
   registerDescribeTableTool(server);
+  registerSearchSchemaTool(server);
   registerExplainTool(server);
   registerResources(server);
 }

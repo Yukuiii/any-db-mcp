@@ -45,7 +45,7 @@ function createQueryOnlyAdapter(rows) {
 }
 
 /** 捕获 registerTool 注册出的 query handler。 */
-function createRegisteredQueryHandler() {
+function createRegisteredQueryHandler(config = { queryTimeoutMs: 1000 }) {
   let handler;
   const server = {
     registerTool(name, _definition, registeredHandler) {
@@ -53,7 +53,7 @@ function createRegisteredQueryHandler() {
     },
   };
 
-  registerQueryTool(server);
+  registerQueryTool(server, config);
   assert.equal(typeof handler, "function");
   return handler;
 }
@@ -75,6 +75,7 @@ describe("query tool", () => {
     assert.equal(body.rowCount, 1000);
     assert.equal(body.limit, 1000);
     assert.equal(body.truncated, true);
+    assert.equal(body.timeoutMs, 1000);
     assert.equal(body.rows.length, 1000);
     assert.deepEqual(body.rows[0], { id: 0 });
     assert.deepEqual(body.rows.at(-1), { id: 999 });
@@ -91,5 +92,20 @@ describe("query tool", () => {
     assert.equal(body.limit, 1000);
     assert.equal(body.truncated, false);
     assert.deepEqual(body.rows, [{ id: 1 }, { id: 2 }]);
+  });
+
+  test("超过 queryTimeoutMs 时返回超时错误", async () => {
+    const pendingRows = new Promise((resolve) => {
+      setTimeout(() => resolve([{ id: 1 }]), 50);
+    });
+    await db.connectWith(createQueryOnlyAdapter(pendingRows));
+    const handler = createRegisteredQueryHandler({ queryTimeoutMs: 5 });
+
+    const response = await handler({ sql: "SELECT * FROM slow_table" });
+    const body = parseToolJson(response);
+
+    assert.equal(response.isError, true);
+    assert.equal(body.success, false);
+    assert.match(body.error, /超时/);
   });
 });

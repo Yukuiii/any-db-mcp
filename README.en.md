@@ -26,11 +26,12 @@ English | [简体中文](./README.md)
 | `connect` | Connect to a database; returns table list and current permission mode | No |
 | `disconnect` | Close current connection and release the pool (idempotent) | No |
 | `connection_status` | Show connection state, ping health, and permission mode | No |
-| `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`) | No |
+| `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`), returning at most the first 1000 rows | No |
 | `execute` | Run a single write statement (DML, or DDL in `full` mode) | Yes |
 | `transaction` | Run multiple SQLs in a transaction; any failure triggers rollback | Yes |
 | `list_tables` | List all table names in the current connected database | No |
 | `describe_table` | Returns columns, indexes, estimated row count, and sample rows in one call | No |
+| `search_schema` | Search table names, column names, and column types by keyword | No |
 | `explain` | Get a SQL execution plan (does not run the original SQL) | No |
 
 ## Permission Modes (PERMISSION_MODE)
@@ -107,6 +108,7 @@ Corresponding MCP client config:
 | `DB_FILEPATH` | SQLite database file path | (empty) |
 | `DB_ENCRYPT` | MSSQL only: enable TLS encryption | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL only: trust self-signed certificate | `false` |
+| `QUERY_TIMEOUT_MS` | Response timeout for the `query` tool, in ms | `30000` |
 | `MCP_TRANSPORT` | Transport: `stdio` (default) / `http` | `stdio` |
 | `MCP_HTTP_HOST` | http only: bind host. Use `0.0.0.0` only with a token set | `127.0.0.1` |
 | `MCP_HTTP_PORT` | http only: listen port | `3000` |
@@ -214,6 +216,9 @@ Every tool returns a unified JSON structure.
 {
   "success": true,
   "rowCount": 2,
+  "limit": 1000,
+  "truncated": false,
+  "timeoutMs": 30000,
   "rows": [
     { "id": 1, "name": "Alice" },
     { "id": 2, "name": "Bob" }
@@ -228,6 +233,16 @@ Every tool returns a unified JSON structure.
 {
   "success": false,
   "error": "Permission mode is readonly; write operations are not allowed."
+}
+```
+
+## search_schema Quick Lookup
+
+`search_schema` searches table names, column names, and column types by keyword. It is useful for locating relevant schema in large databases before calling `describe_table`. Responses return at most the first 50 matches and include `failedTables` when individual table descriptions could not be read.
+
+```json
+{
+  "keyword": "email"
 }
 ```
 
@@ -327,6 +342,7 @@ src/
     ├── transaction.ts    transaction tool
     ├── list-tables.ts    list_tables tool
     ├── describe-table.ts describe_table tool
+    ├── search-schema.ts  search_schema tool
     ├── explain.ts        explain tool
     ├── resources.ts      MCP Resources (db://tables + db://table/{name})
     ├── permission.ts     Permission check helper

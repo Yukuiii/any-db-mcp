@@ -21,6 +21,7 @@ services:
       - DB_NAME=${DB_NAME:-}
       - DB_ENCRYPT=${DB_ENCRYPT:-true}
       - DB_TRUST_SERVER_CERTIFICATE=${DB_TRUST_SERVER_CERTIFICATE:-false}
+      - QUERY_TIMEOUT_MS=${QUERY_TIMEOUT_MS:-30000}
     restart: unless-stopped
     # 用 .env 文件管理环境变量:
     # env_file: .env

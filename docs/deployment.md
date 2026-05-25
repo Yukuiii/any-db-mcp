@@ -14,6 +14,7 @@
 | `DB_FILEPATH` | SQLite 文件路径 | 空 |
 | `DB_ENCRYPT` | MSSQL TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL 信任自签证书 | `false` |
+| `QUERY_TIMEOUT_MS` | `query` 工具响应超时时间（ms） | `30000` |
 | `MCP_TRANSPORT` | 传输方式 | `stdio` |
 | `MCP_HTTP_HOST` | HTTP 监听主机 | `127.0.0.1` |
 | `MCP_HTTP_PORT` | HTTP 监听端口 | `3000` |

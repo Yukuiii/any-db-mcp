@@ -50,6 +50,8 @@ export interface AppConfig {
   readonly permissionMode: PermissionMode;
   readonly transport: TransportType;
   readonly http: HttpConfig;
+  /** query 工具超时时间,单位 ms */
+  readonly queryTimeoutMs: number;
 }
 
 /** 各数据库类型的默认端口 */
@@ -92,6 +94,7 @@ export function loadConfig(): AppConfig {
       path: process.env.MCP_HTTP_PATH || "/mcp",
       authToken: process.env.MCP_AUTH_TOKEN || "",
     }),
+    queryTimeoutMs: parsePositiveInt(process.env.QUERY_TIMEOUT_MS, 30000, "QUERY_TIMEOUT_MS"),
   };
 
   return Object.freeze(config);
@@ -116,6 +119,17 @@ function parseBool(value: string | undefined, defaultValue: boolean): boolean {
   const v = value.trim().toLowerCase();
   if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
   if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return defaultValue;
+}
+
+/** 解析正整数环境变量,非法值降级为默认值并打 warning */
+function parsePositiveInt(value: string | undefined, defaultValue: number, name: string): number {
+  if (value === undefined || value === "") return defaultValue;
+  const parsed = Number(value);
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+  console.error(`[any-db-mcp] 非法的 ${name}="${value}",已降级到默认值 ${defaultValue}。`);
   return defaultValue;
 }
 
