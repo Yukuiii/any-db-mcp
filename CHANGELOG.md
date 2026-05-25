@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.0] — 2026-05-25
 
 ### Added
 
@@ -25,5 +25,6 @@ All notable changes to this project will be documented in this file.
 - **Unified structured responses**: All tools return consistent JSON with `elapsedMs` for latency visibility.
 - **Zero-deployment**: Single-line `npx` invocation in any MCP client.
 
-[unreleased]: https://github.com/Yukuiii/any-db-mcp/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/Yukuiii/any-db-mcp/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Yukuiii/any-db-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Yukuiii/any-db-mcp/releases/tag/v1.0.0
