@@ -12,6 +12,22 @@ export type PermissionMode = "readonly" | "readwrite" | "full";
 /** 合法 mode 集合，用于环境变量校验 */
 export const PERMISSION_MODES: readonly PermissionMode[] = ["readonly", "readwrite", "full"] as const;
 
+/** Server 传输方式 */
+export type TransportType = "stdio" | "http";
+export const TRANSPORT_TYPES: readonly TransportType[] = ["stdio", "http"] as const;
+
+/** HTTP 传输配置(仅当 transport=http 时生效) */
+export interface HttpConfig {
+  /** 监听主机,默认 127.0.0.1。远程访问设为 0.0.0.0 时务必配置 authToken */
+  readonly host: string;
+  /** 监听端口,默认 3000 */
+  readonly port: number;
+  /** MCP endpoint path,默认 /mcp */
+  readonly path: string;
+  /** 可选 Bearer Token,设置后所有 HTTP 请求需带 Authorization: Bearer <token>;为空则不鉴权 */
+  readonly authToken: string;
+}
+
 /** 数据库连接配置（支持多种数据库类型，启动后不可变） */
 export interface DbConfig {
   readonly type: DatabaseType;
@@ -32,6 +48,8 @@ export interface DbConfig {
 export interface AppConfig {
   readonly db: DbConfig | null;
   readonly permissionMode: PermissionMode;
+  readonly transport: TransportType;
+  readonly http: HttpConfig;
 }
 
 /** 各数据库类型的默认端口 */
@@ -67,9 +85,29 @@ export function loadConfig(): AppConfig {
         })
       : null,
     permissionMode: parsePermissionMode(process.env.PERMISSION_MODE),
+    transport: parseTransport(process.env.MCP_TRANSPORT),
+    http: Object.freeze({
+      host: process.env.MCP_HTTP_HOST || "127.0.0.1",
+      port: parseInt(process.env.MCP_HTTP_PORT || "3000", 10),
+      path: process.env.MCP_HTTP_PATH || "/mcp",
+      authToken: process.env.MCP_AUTH_TOKEN || "",
+    }),
   };
 
   return Object.freeze(config);
+}
+
+/** 解析 MCP_TRANSPORT,非法值降级 stdio 并打 warning */
+function parseTransport(value: string | undefined): TransportType {
+  if (!value) return "stdio";
+  const normalized = value.toLowerCase() as TransportType;
+  if (TRANSPORT_TYPES.includes(normalized)) {
+    return normalized;
+  }
+  console.error(
+    `[any-db-mcp] 非法的 MCP_TRANSPORT="${value}",已降级到默认值 "stdio"。合法值:${TRANSPORT_TYPES.join(" | ")}`
+  );
+  return "stdio";
 }
 
 /** 解析布尔环境变量,接受 "1"/"true"/"yes" 为真,空值用默认 */

@@ -9,7 +9,8 @@
 ## 特性
 
 - **统一适配**：MySQL / PostgreSQL / SQLite / MSSQL 四种数据库共用同一套工具接口
-- **MCP Resources 暴露 schema**：`db://tables` 与 `db://table/{name}` 让客户端主动消化库结构,大幅减少每次对话重复 describe 的 token 开销
+- **双传输模式**:`stdio` 本地子进程 + `Streamable HTTP` 远程,后者带 stateful session 与可选 Bearer Token 鉴权
+- **MCP Resources 暴露 schema**:`db://tables` 与 `db://table/{name}` 让客户端主动消化库结构,大幅减少每次对话重复 describe 的 token 开销
 - **三档权限模式**：`readonly` / `readwrite` / `full`，启动时由环境变量决定，**运行时不可篡改**（5 层防 LLM 提权设计）
 - **事务支持**：单工具批量提交，任一失败自动回滚
 - **连接弹性**：TCP keepalive + 连接丢失自动重建并重试 + 健康检查工具
@@ -106,6 +107,11 @@ node dist/index.js
 | `DB_FILEPATH` | SQLite 数据库文件路径 | （空） |
 | `DB_ENCRYPT` | 仅 MSSQL：是否启用 TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | 仅 MSSQL：是否信任自签证书 | `false` |
+| `MCP_TRANSPORT` | 传输方式:`stdio`(默认) / `http` | `stdio` |
+| `MCP_HTTP_HOST` | 仅 http:监听主机,公网暴露请显式设 `0.0.0.0` 并配 token | `127.0.0.1` |
+| `MCP_HTTP_PORT` | 仅 http:监听端口 | `3000` |
+| `MCP_HTTP_PATH` | 仅 http:MCP endpoint 路径 | `/mcp` |
+| `MCP_AUTH_TOKEN` | 仅 http:可选 Bearer Token,设置后所有请求需带 `Authorization: Bearer <token>` | （空,不鉴权） |
 
 > 不配置 `DB_*` 时，Server 启动后不自动连接，需 LLM 主动调用 `connect` 工具。
 
@@ -167,6 +173,36 @@ LLM 调用 `connect` 工具时的入参示例：
 >
 > - **MariaDB / TiDB / OceanBase** 等 MySQL 协议兼容数据库 → 选 `type: mysql`
 > - **CockroachDB / YugabyteDB** 等 PG 协议兼容数据库 → 选 `type: postgresql`
+
+## 传输方式 (Transport)
+
+支持两种 transport,通过 `MCP_TRANSPORT` 切换。
+
+### `stdio` (默认)
+
+最常见的本地集成方式,client 以子进程方式启动 server,通过标准输入输出通信。无需端口/网络,Claude Code、Cursor 等 IDE 默认走这条路径。
+
+### `Streamable HTTP`
+
+按 [MCP spec 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26) 实现:`POST /mcp` 接收 JSON-RPC,响应可为 JSON 或 SSE 流;`GET /mcp` 用于建立长连接接收 server-initiated 消息;`DELETE /mcp` 关闭 session。每个 session 由服务端生成 `Mcp-Session-Id` 头并返回,客户端后续请求需带回。
+
+```bash
+# 本地开发:监听 127.0.0.1,无鉴权
+MCP_TRANSPORT=http npx @sakura0v0/any-db-mcp
+
+# 远程访问:绑 0.0.0.0 + Bearer Token + 反向代理 TLS
+MCP_TRANSPORT=http \
+MCP_HTTP_HOST=0.0.0.0 \
+MCP_HTTP_PORT=3000 \
+MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
+npx @sakura0v0/any-db-mcp
+```
+
+**安全约定**:
+- 默认 `MCP_HTTP_HOST=127.0.0.1`,只接受本机回环。生产远程访问务必同时设置 `MCP_AUTH_TOKEN` 并通过反向代理(nginx / caddy)套 TLS。
+- 设置 `MCP_AUTH_TOKEN` 后所有请求需带 `Authorization: Bearer <token>`,使用常数时间比较抵御计时攻击。
+- HTTP 请求 body 上限 1 MB,防止简单 DoS。
+- 多 session 共享 `db` 单例数据库连接池:适合"个人远程访问",多用户场景应每 client 部署独立 server。
 
 ## 响应格式
 
@@ -267,7 +303,8 @@ LLM 调用 `transaction` 工具：
 
 ```
 src/
-├── index.ts              入口：加载配置 → 注册工具 → 可选自动连接 → stdio 启动
+├── index.ts              入口：加载配置 → 注册工具 → 可选自动连接 → 按 transport 启动
+├── transport.ts          stdio + Streamable HTTP 启动器(stateful session + Bearer)
 ├── config.ts             AppConfig 与 PermissionMode（启动后冻结，运行时不可改）
 ├── db.ts                 DatabaseManager 单例，持有当前 Adapter
 ├── adapters/

@@ -1,31 +1,21 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
 import { db } from "./db.js";
-import { registerTools } from "./tools/index.js";
 import { MySQLAdapter } from "./adapters/mysql.js";
 import { PostgreSQLAdapter } from "./adapters/postgresql.js";
 import { SQLiteAdapter } from "./adapters/sqlite.js";
 import { MSSQLAdapter } from "./adapters/mssql.js";
 import type { DbConfig } from "./config.js";
+import { startStdio, startHttp } from "./transport.js";
 
 /** MCP Server 主入口 */
 async function main(): Promise<void> {
   const config = loadConfig();
-
-  const server = new McpServer({
-    name: "any-db-mcp",
-    version: "1.0.0",
-  });
-
-  // 注册所有 Tools
-  registerTools(server, config);
-
   console.error(`[any-db-mcp] 权限模式: ${config.permissionMode}`);
+  console.error(`[any-db-mcp] 传输方式: ${config.transport}`);
 
-  // 如果环境变量中配置了数据库连接信息，自动连接
+  // 自动连接数据库:db 单例为所有 session 共享
   if (config.db) {
     try {
       const adapter = createAdapterFromConfig(config.db);
@@ -35,13 +25,12 @@ async function main(): Promise<void> {
         : `${config.db.type} ${config.db.host}:${config.db.port}`;
       console.error(`[any-db-mcp] 已通过环境变量连接到 ${label}`);
 
-      // 输出表数量概览（失败不影响启动）
       try {
         const tables = await db.listTables();
         console.error(`[any-db-mcp] 当前数据库共 ${tables.length} 张表`);
       } catch (error) {
         console.error(
-          `[any-db-mcp] 表列表获取失败（不影响连接）: ${error instanceof Error ? error.message : String(error)}`
+          `[any-db-mcp] 表列表获取失败(不影响连接): ${error instanceof Error ? error.message : String(error)}`
         );
       }
     } catch (error) {
@@ -51,24 +40,23 @@ async function main(): Promise<void> {
       console.error("[any-db-mcp] 可通过 connect 工具手动连接数据库");
     }
   } else {
-    console.error("[any-db-mcp] 未配置数据库连接信息，请通过 connect 工具连接数据库");
+    console.error("[any-db-mcp] 未配置数据库连接信息,请通过 connect 工具连接数据库");
   }
 
-  // 使用 stdio 传输协议
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // 根据传输方式启动
+  if (config.transport === "http") {
+    await startHttp(config);
+  } else {
+    await startStdio(config);
+  }
 
-  console.error("[any-db-mcp] MCP Server 已启动 (stdio)");
-
-  // 优雅退出：销毁连接池
-  process.on("SIGINT", async () => {
+  // 优雅退出:销毁数据库连接池
+  const shutdown = async () => {
     await db.disconnect();
     process.exit(0);
-  });
-  process.on("SIGTERM", async () => {
-    await db.disconnect();
-    process.exit(0);
-  });
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 /** 根据环境变量配置创建对应适配器 */

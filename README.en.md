@@ -9,6 +9,7 @@ English | [简体中文](./README.md)
 ## Features
 
 - **Unified adapter**: One tool surface for MySQL, PostgreSQL, SQLite, and MSSQL
+- **Dual transport**: `stdio` for local subprocess + `Streamable HTTP` for remote access, the latter with stateful sessions and optional Bearer Token auth
 - **MCP Resources for schema**: `db://tables` and `db://table/{name}` let clients subscribe to live schema metadata, cutting the per-conversation token cost of repeated describe calls
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
 - **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
@@ -106,6 +107,11 @@ Corresponding MCP client config:
 | `DB_FILEPATH` | SQLite database file path | (empty) |
 | `DB_ENCRYPT` | MSSQL only: enable TLS encryption | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL only: trust self-signed certificate | `false` |
+| `MCP_TRANSPORT` | Transport: `stdio` (default) / `http` | `stdio` |
+| `MCP_HTTP_HOST` | http only: bind host. Use `0.0.0.0` only with a token set | `127.0.0.1` |
+| `MCP_HTTP_PORT` | http only: listen port | `3000` |
+| `MCP_HTTP_PATH` | http only: MCP endpoint path | `/mcp` |
+| `MCP_AUTH_TOKEN` | http only: optional Bearer token; if set, every request needs `Authorization: Bearer <token>` | (empty, no auth) |
 
 > When no `DB_*` vars are set, the server starts without connecting. The LLM must call the `connect` tool explicitly.
 
@@ -167,6 +173,36 @@ Example inputs the LLM passes to the `connect` tool:
 >
 > - **MariaDB / TiDB / OceanBase** (MySQL wire protocol) → use `type: mysql`
 > - **CockroachDB / YugabyteDB** (PostgreSQL wire protocol) → use `type: postgresql`
+
+## Transports
+
+Two transports are supported, selected via `MCP_TRANSPORT`.
+
+### `stdio` (default)
+
+The classic local integration: the client spawns the server as a subprocess and exchanges JSON-RPC over stdin/stdout. No ports, no networking. Claude Code, Cursor, and most IDEs use this by default.
+
+### `Streamable HTTP`
+
+Implements [MCP spec 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26): `POST /mcp` accepts JSON-RPC and may stream back as SSE; `GET /mcp` opens a long-lived stream for server-initiated messages; `DELETE /mcp` ends the session. The server generates an `Mcp-Session-Id` header on initialize that the client must echo on subsequent requests.
+
+```bash
+# Local dev: bind 127.0.0.1, no auth
+MCP_TRANSPORT=http npx @sakura0v0/any-db-mcp
+
+# Remote: bind 0.0.0.0 + Bearer token + reverse-proxy TLS
+MCP_TRANSPORT=http \
+MCP_HTTP_HOST=0.0.0.0 \
+MCP_HTTP_PORT=3000 \
+MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
+npx @sakura0v0/any-db-mcp
+```
+
+**Security conventions**:
+- Defaults to `MCP_HTTP_HOST=127.0.0.1`, loopback only. For real remote access, set `MCP_AUTH_TOKEN` and put TLS in front (nginx / caddy).
+- When `MCP_AUTH_TOKEN` is set, every request must include `Authorization: Bearer <token>`. Comparison is constant-time to resist timing attacks.
+- HTTP request bodies are capped at 1 MB to limit trivial DoS.
+- All sessions share the single `db` connection pool — suitable for "personal remote access". For true multi-tenant deployment run a server per client.
 
 ## Response Format
 
@@ -271,7 +307,8 @@ If any statement fails, the transaction auto-rolls back and all changes are undo
 
 ```
 src/
-├── index.ts              Entry: load config → register tools → optional auto-connect → start stdio
+├── index.ts              Entry: load config → register tools → optional auto-connect → start transport
+├── transport.ts          stdio + Streamable HTTP launchers (stateful session + Bearer)
 ├── config.ts             AppConfig and PermissionMode (frozen at load, immutable at runtime)
 ├── db.ts                 DatabaseManager singleton holding the active Adapter
 ├── adapters/
