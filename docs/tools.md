@@ -32,13 +32,13 @@
 
 ### query
 
-执行只读 SQL 查询。仅允许 `SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN` 开头语句。
+执行只读 SQL 查询。仅允许 `SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN` 开头语句。响应最多返回前 1000 行，`limit` 字段会明确告知本次返回上限。
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | sql | string | 要执行的 SQL 查询语句 |
 
-返回：`rowCount`、`rows`、`elapsedMs`。
+返回：`rowCount`、`limit`、`truncated`、`rows`、`elapsedMs`。
 
 安全约束：拦截多语句，拦截非只读 SQL。
 

@@ -26,7 +26,7 @@
 | `connect` | 动态连接数据库，返回当前数据库的表名列表与权限模式 | 否 |
 | `disconnect` | 主动断开连接并释放连接池（幂等） | 否 |
 | `connection_status` | 查看当前连接状态、ping 健康度与权限模式 | 否 |
-| `query` | 执行只读查询（`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`） | 否 |
+| `query` | 执行只读查询（`SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN`），响应最多返回前 1000 行 | 否 |
 | `execute` | 执行单条写操作（DML，或 `full` 模式下 DDL） | ✓ |
 | `transaction` | 在事务中顺序执行多条 SQL，任一失败回滚 | ✓ |
 | `list_tables` | 列出当前连接数据库的所有表名 | 否 |
@@ -214,6 +214,8 @@ npx @sakura0v0/any-db-mcp
 {
   "success": true,
   "rowCount": 2,
+  "limit": 1000,
+  "truncated": false,
   "rows": [
     { "id": 1, "name": "Alice" },
     { "id": 2, "name": "Bob" }
