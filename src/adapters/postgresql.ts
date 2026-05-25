@@ -2,6 +2,7 @@ import pg from "pg";
 import type {
   DatabaseAdapter,
   ExecuteResult,
+  ForeignKey,
   TableDescription,
   TableColumn,
   TableIndex,
@@ -208,7 +209,31 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         if (pkColumns.has(col.name)) col.key = "PRI";
       }
 
-      return { table, columns, indexes: Array.from(indexMap.values()) };
+      // 外键信息
+      const fkSql = `
+        SELECT
+          kcu.column_name,
+          ccu.table_name AS referenced_table,
+          ccu.column_name AS referenced_column,
+          tc.constraint_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_name = $1 AND tc.table_schema = 'public'
+        ORDER BY tc.constraint_name
+      `;
+      const fkResult = await this.pool!.query(fkSql, [table]);
+      const foreignKeys: ForeignKey[] = fkResult.rows.map((row) => ({
+        column: row.column_name as string,
+        referencedTable: row.referenced_table as string,
+        referencedColumn: row.referenced_column as string,
+        constraintName: row.constraint_name as string,
+      }));
+
+      return { table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
     });
   }
 

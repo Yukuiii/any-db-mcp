@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import type {
   DatabaseAdapter,
   ExecuteResult,
+  ForeignKey,
   TableDescription,
   TableColumn,
   TableIndex,
@@ -158,7 +159,22 @@ export class SQLiteAdapter implements DatabaseAdapter {
       });
     }
 
-    return { table, columns, indexes };
+    // 外键信息
+    const fkRows = this.db!.prepare(`PRAGMA foreign_key_list('${safeTable}')`).all() as {
+      id: number;
+      seq: number;
+      table: string;
+      from: string;
+      to: string;
+    }[];
+    const foreignKeys: ForeignKey[] = fkRows.map((row) => ({
+      column: row.from,
+      referencedTable: row.table,
+      referencedColumn: row.to,
+      constraintName: `fk_${table}_${row.from}`,
+    }));
+
+    return { table, columns, indexes, foreignKeys };
   }
 
   /** 采样前 N 行数据 */

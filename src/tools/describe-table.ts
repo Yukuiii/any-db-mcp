@@ -12,7 +12,7 @@ export function registerDescribeTableTool(server: McpServer): void {
     "describe_table",
     {
       description:
-        "查看指定表的详细信息,一次返回:列定义/索引/估算行数/数据采样。LLM 在写 SQL 前调用此工具可同时拿到字段结构、表大小量级、字段真实取值示例,大幅减少猜测。",
+        "查看指定表的详细信息,一次返回:列定义/索引/外键/估算行数/数据采样。LLM 在写 SQL 前调用此工具可同时拿到字段结构、关联关系、表大小量级、字段真实取值示例,大幅减少猜测。",
       inputSchema: {
         table: z.string().min(1).describe("要查看的表名"),
         sampleLimit: z
@@ -41,6 +41,7 @@ export function registerDescribeTableTool(server: McpServer): void {
           table: description.table,
           columns: description.columns,
           indexes: description.indexes,
+          foreignKeys: description.foreignKeys,
           rowCount: rowCount.value,
           rowCountIsEstimate: rowCount.isEstimate,
           sampleCount: sample.length,

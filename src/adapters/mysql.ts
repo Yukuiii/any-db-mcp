@@ -2,6 +2,7 @@ import mysql from "mysql2/promise";
 import type {
   DatabaseAdapter,
   ExecuteResult,
+  ForeignKey,
   TableDescription,
   TableColumn,
   TableIndex,
@@ -174,7 +175,23 @@ export class MySQLAdapter implements DatabaseAdapter {
         indexMap.get(name)!.columns.push(row["Column_name"] as string);
       }
 
-      return { table, columns, indexes: Array.from(indexMap.values()) };
+      // 外键信息
+      const [fkRowsRaw] = await this.pool!.query(
+        `SELECT COLUMN_NAME AS column_name, REFERENCED_TABLE_NAME AS referenced_table,
+                REFERENCED_COLUMN_NAME AS referenced_column, CONSTRAINT_NAME AS constraint_name
+         FROM information_schema.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL
+         ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION`,
+        [table]
+      );
+      const foreignKeys: ForeignKey[] = (fkRowsRaw as Record<string, unknown>[]).map((row) => ({
+        column: row["column_name"] as string,
+        referencedTable: row["referenced_table"] as string,
+        referencedColumn: row["referenced_column"] as string,
+        constraintName: row["constraint_name"] as string,
+      }));
+
+      return { table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
     });
   }
 

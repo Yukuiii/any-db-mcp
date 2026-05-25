@@ -18,11 +18,20 @@ export interface TableIndex {
   unique: boolean;
 }
 
+/** 外键信息 */
+export interface ForeignKey {
+  column: string;
+  referencedTable: string;
+  referencedColumn: string;
+  constraintName: string;
+}
+
 /** 表结构描述 */
 export interface TableDescription {
   table: string;
   columns: TableColumn[];
   indexes: TableIndex[];
+  foreignKeys: ForeignKey[];
 }
 
 /**

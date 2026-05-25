@@ -2,6 +2,7 @@ import sql from "mssql";
 import type {
   DatabaseAdapter,
   ExecuteResult,
+  ForeignKey,
   TableColumn,
   TableDescription,
   TableIndex,
@@ -244,7 +245,34 @@ export class MSSQLAdapter implements DatabaseAdapter {
         if (pkColumns.has(col.name)) col.key = "PRI";
       }
 
-      return { table, columns, indexes: Array.from(indexMap.values()) };
+      // 外键信息
+      const fkRes = await this.pool!
+        .request()
+        .input("table", sql.NVarChar, table)
+        .query(`
+          SELECT
+            fk.name AS constraint_name,
+            c1.name AS column_name,
+            t2.name AS referenced_table,
+            c2.name AS referenced_column
+          FROM sys.foreign_keys fk
+          JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+          JOIN sys.columns c1 ON c1.object_id = fkc.parent_object_id AND c1.column_id = fkc.parent_column_id
+          JOIN sys.columns c2 ON c2.object_id = fkc.referenced_object_id AND c2.column_id = fkc.referenced_column_id
+          JOIN sys.tables t2 ON t2.object_id = fkc.referenced_object_id
+          WHERE fk.parent_object_id = OBJECT_ID(@table)
+          ORDER BY fk.name
+        `);
+      const foreignKeys: ForeignKey[] = (fkRes.recordset ?? []).map(
+        (row: { constraint_name: string; column_name: string; referenced_table: string; referenced_column: string }) => ({
+          column: row.column_name,
+          referencedTable: row.referenced_table,
+          referencedColumn: row.referenced_column,
+          constraintName: row.constraint_name,
+        })
+      );
+
+      return { table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
     });
   }
 
