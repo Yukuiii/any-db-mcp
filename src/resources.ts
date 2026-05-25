@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { db } from "../db.js";
+import { db } from "./db.js";
 
 /**
  * 注册 MCP Resources。

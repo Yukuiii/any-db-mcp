@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "../db.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /** disconnect — 主动断开当前数据库连接 */
 export function registerDisconnectTool(server: McpServer): void {

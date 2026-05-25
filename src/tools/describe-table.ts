@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "../db.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /**
  * describe_table — 查看指定表的详细结构 + 行数估算 + 数据采样。

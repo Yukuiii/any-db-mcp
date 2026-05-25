@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "../db.js";
-import { READONLY_SQL_PATTERN, checkSingleStatement } from "./sql-patterns.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { READONLY_SQL_PATTERN, checkSingleStatement } from "../utils/sql-patterns.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /** query — 执行只读 SQL 查询 */
 export function registerQueryTool(server: McpServer): void {

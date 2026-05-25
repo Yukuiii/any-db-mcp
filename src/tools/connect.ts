@@ -7,7 +7,7 @@ import { SQLiteAdapter } from "../adapters/sqlite.js";
 import { MSSQLAdapter } from "../adapters/mssql.js";
 import type { DatabaseType } from "../adapters/types.js";
 import type { AppConfig } from "../config.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /**
  * SECURITY: 严禁在此工具的 inputSchema 中加入任何与权限模式相关的字段

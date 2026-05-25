@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "../db.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /** list_tables — 列出当前连接数据库的所有表名 */
 export function registerListTablesTool(server: McpServer): void {

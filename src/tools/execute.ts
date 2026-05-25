@@ -2,9 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "../db.js";
 import type { AppConfig } from "../config.js";
-import { checkWritePermission } from "./permission.js";
-import { checkSingleStatement } from "./sql-patterns.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { checkWritePermission } from "../utils/permission.js";
+import { checkSingleStatement } from "../utils/sql-patterns.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /** execute — 执行单条写操作(DML,或 full 模式下的 DDL) */
 export function registerExecuteTool(server: McpServer, config: AppConfig): void {

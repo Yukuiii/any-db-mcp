@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "../db.js";
-import { checkSingleStatement } from "./sql-patterns.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { checkSingleStatement } from "../utils/sql-patterns.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /**
  * 只允许这些语句被 EXPLAIN。拒绝 ANALYZE / VACUUM / REINDEX / OPTIMIZE 等

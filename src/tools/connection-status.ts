@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "../db.js";
 import type { AppConfig } from "../config.js";
-import { ok, fail, errorMessage } from "./response.js";
+import { ok, fail, errorMessage } from "../utils/response.js";
 
 /** connection_status — 查看当前数据库连接状态与健康度 */
 export function registerConnectionStatusTool(server: McpServer, config: AppConfig): void {
