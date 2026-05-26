@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -8,9 +9,23 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { AppConfig } from "./config.js";
 import { registerTools } from "./tools/index.js";
 
+/** 从 package.json 读取版本号,避免与发布版本脱节(读取失败兜底 0.0.0) */
+const SERVER_VERSION = readServerVersion();
+
+function readServerVersion(): string {
+  try {
+    const pkg = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8")
+    ) as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 /** Server 工厂:每次调用产出一个全新 server 实例并完成 tools/resources 注册 */
 function createServer(config: AppConfig): McpServer {
-  const server = new McpServer({ name: "any-db-mcp", version: "1.0.0" });
+  const server = new McpServer({ name: "any-db-mcp", version: SERVER_VERSION });
   registerTools(server, config);
   return server;
 }
