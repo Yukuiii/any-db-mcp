@@ -38,24 +38,32 @@ export function registerSearchSchemaTool(server: McpServer): void {
 
       try {
         const tables = await db.listTables();
-        const matches: SchemaSearchMatch[] = [];
-        const failedTables: Array<{ table: string; error: string }> = [];
 
-        for (const table of tables) {
-          if (includesKeyword(table, normalizedKeyword)) {
-            matches.push({ kind: "table", matchedBy: "table", table });
-          }
-
-          try {
-            const description = await db.describeTable(table);
-            for (const column of description.columns) {
-              const match = matchColumn(table, column, normalizedKeyword);
-              if (match) matches.push(match);
+        // 并行 describe 各表:串行往返在大库下很慢,改为并发由连接池自动限流。
+        // 按 listTables 顺序聚合,保证 matches / failedTables 输出顺序确定。
+        const perTable = await Promise.all(
+          tables.map(async (table) => {
+            const tableMatches: SchemaSearchMatch[] = [];
+            if (includesKeyword(table, normalizedKeyword)) {
+              tableMatches.push({ kind: "table", matchedBy: "table", table });
             }
-          } catch (error) {
-            failedTables.push({ table, error: errorMessage(error) });
-          }
-        }
+            try {
+              const description = await db.describeTable(table);
+              for (const column of description.columns) {
+                const match = matchColumn(table, column, normalizedKeyword);
+                if (match) tableMatches.push(match);
+              }
+              return { matches: tableMatches, failed: null as { table: string; error: string } | null };
+            } catch (error) {
+              return { matches: tableMatches, failed: { table, error: errorMessage(error) } };
+            }
+          })
+        );
+
+        const matches: SchemaSearchMatch[] = perTable.flatMap((r) => r.matches);
+        const failedTables = perTable
+          .map((r) => r.failed)
+          .filter((f): f is { table: string; error: string } => f !== null);
 
         const limitedMatches = matches.slice(0, SEARCH_SCHEMA_RESULT_LIMIT);
         return ok({
