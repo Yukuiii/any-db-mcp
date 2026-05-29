@@ -1,10 +1,11 @@
 import { db } from "../../db.js";
+import type { TableInfo } from "../../adapters/types.js";
 import { errorMessage } from "../../utils/response.js";
 
 /** 表名列表响应片段,供连接类工具复用。 */
 type TableListPayload = {
   tableCount: number;
-  tables: string[];
+  tables: TableInfo[];
   warning?: string;
 };
 

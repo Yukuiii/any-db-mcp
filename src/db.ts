@@ -2,6 +2,7 @@ import type {
   DatabaseAdapter,
   ExecuteResult,
   TableDescription,
+  TableInfo,
   TableRowCount,
   TransactionResult,
 } from "./adapters/types.js";
@@ -60,8 +61,8 @@ class DatabaseManager {
     return this.getAdapter().transaction(sqls);
   }
 
-  /** 列出当前连接数据库的所有表 */
-  async listTables(): Promise<string[]> {
+  /** 列出当前连接数据库的所有表(含表注释) */
+  async listTables(): Promise<TableInfo[]> {
     return this.getAdapter().listTables();
   }
 

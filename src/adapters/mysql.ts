@@ -6,6 +6,7 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TableInfo,
   TableRowCount,
   TransactionResult,
   TransactionStepResult,
@@ -132,12 +133,21 @@ export class MySQLAdapter implements DatabaseAdapter {
     }
   }
 
-  /** 列出当前连接数据库的所有表 */
-  async listTables(): Promise<string[]> {
+  /** 列出当前连接数据库的所有表(含表注释) */
+  async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const [rows] = await this.pool!.query("SHOW TABLES");
-      return (rows as Record<string, unknown>[]).map((row) => Object.values(row)[0] as string);
+      // 用 information_schema 取表注释;BASE TABLE 与 VIEW 都纳入,与 SHOW TABLES 行为一致
+      const [rows] = await this.pool!.query(
+        `SELECT TABLE_NAME AS name, TABLE_COMMENT AS comment
+         FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE()
+         ORDER BY TABLE_NAME`
+      );
+      return (rows as Record<string, unknown>[]).map((row) => ({
+        name: row["name"] as string,
+        comment: normalizeComment(row["comment"]),
+      }));
     });
   }
 
@@ -147,8 +157,8 @@ export class MySQLAdapter implements DatabaseAdapter {
       this.ensureConnected();
       const ident = quoteMysqlIdent(table);
 
-      // 列信息
-      const [colRowsRaw] = await this.pool!.query(`DESCRIBE ${ident}`);
+      // 列信息:SHOW FULL COLUMNS 比 DESCRIBE 多出 Comment 列,其余字段名一致
+      const [colRowsRaw] = await this.pool!.query(`SHOW FULL COLUMNS FROM ${ident}`);
       const colRows = colRowsRaw as Record<string, unknown>[];
       const columns: TableColumn[] = colRows.map((row) => ({
         name: row["Field"] as string,
@@ -157,6 +167,7 @@ export class MySQLAdapter implements DatabaseAdapter {
         defaultValue: (row["Default"] as string | null) ?? null,
         key: (row["Key"] as string) || "",
         extra: (row["Extra"] as string) || "",
+        comment: normalizeComment(row["Comment"]),
       }));
 
       // 索引信息
@@ -285,6 +296,12 @@ function isMysqlConnectionLost(err: unknown): boolean {
 /** MySQL 标识符 quote:反引号包裹,内部反引号双写 */
 function quoteMysqlIdent(name: string): string {
   return "`" + name.replace(/`/g, "``") + "`";
+}
+
+/** MySQL 无注释时返回空串,统一归一化为 null */
+function normalizeComment(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  return raw.length > 0 ? raw : null;
 }
 
 /** 采样行数夹紧到 [0, 20]; 非法值降级为 0 */

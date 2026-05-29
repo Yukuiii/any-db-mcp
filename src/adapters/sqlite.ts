@@ -6,6 +6,7 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TableInfo,
   TableRowCount,
   TransactionResult,
   TransactionStepResult,
@@ -102,13 +103,13 @@ export class SQLiteAdapter implements DatabaseAdapter {
     return { committed: true, steps, failedAt: null, error: null };
   }
 
-  /** 列出所有表 */
-  async listTables(): Promise<string[]> {
+  /** 列出所有表(SQLite 无原生表注释,comment 恒为 null) */
+  async listTables(): Promise<TableInfo[]> {
     this.ensureConnected();
     const rows = this.db!.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     ).all() as { name: string }[];
-    return rows.map((r) => r.name);
+    return rows.map((r) => ({ name: r.name, comment: null }));
   }
 
   /** 查看表结构 */
@@ -135,6 +136,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
       defaultValue: row.dflt_value,
       key: row.pk > 0 ? "PRI" : "",
       extra: "",
+      comment: null, // SQLite 无原生列注释
     }));
 
     // 索引信息

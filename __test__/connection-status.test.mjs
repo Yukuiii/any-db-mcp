@@ -37,7 +37,10 @@ function createStatusAdapter(overrides = {}) {
       if (overrides.listTablesFails) {
         throw new Error("list tables failed");
       }
-      return ["users", "orders"];
+      return [
+        { name: "users", comment: null },
+        { name: "orders", comment: null },
+      ];
     },
     async describeTable() {
       return { table: "", columns: [], indexes: [], foreignKeys: [] };
@@ -84,7 +87,10 @@ describe("connection_status tool", () => {
     assert.equal(body.pingError, null);
     assert.equal(body.permissionMode, "readwrite");
     assert.equal(body.tableCount, 2);
-    assert.deepEqual(body.tables, ["users", "orders"]);
+    assert.deepEqual(body.tables, [
+      { name: "users", comment: null },
+      { name: "orders", comment: null },
+    ]);
   });
 
   test("表名列表获取失败不影响连接状态返回", async () => {

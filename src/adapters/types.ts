@@ -1,6 +1,12 @@
 /** 数据库类型 */
 export type DatabaseType = "mysql" | "postgresql" | "sqlite" | "mssql";
 
+/** 表清单条目:表名 + 表注释(无注释或 SQLite 无原生概念时为 null) */
+export interface TableInfo {
+  name: string;
+  comment: string | null;
+}
+
 /** 表信息 */
 export interface TableColumn {
   name: string;
@@ -9,6 +15,8 @@ export interface TableColumn {
   defaultValue: string | null;
   key: string;
   extra: string;
+  /** 列注释(MySQL COLUMN_COMMENT / PG col_description / MSSQL MS_Description;无注释或 SQLite 为 null) */
+  comment: string | null;
 }
 
 /** 索引信息 */
@@ -95,8 +103,8 @@ export interface DatabaseAdapter {
   /** 在事务中顺序执行多条 SQL；任一失败则回滚 */
   transaction(sqls: string[]): Promise<TransactionResult>;
 
-  /** 列出当前连接数据库的所有表 */
-  listTables(): Promise<string[]>;
+  /** 列出当前连接数据库的所有表(含表注释) */
+  listTables(): Promise<TableInfo[]>;
 
   /** 查看表结构 */
   describeTable(table: string): Promise<TableDescription>;

@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "./db.js";
+import type { TableInfo } from "./adapters/types.js";
 
 /**
  * 注册 MCP Resources。
@@ -36,12 +37,13 @@ export function registerResources(server: McpServer): void {
       const tables = await db.listTables();
       // 行数与表名并行,任一失败不影响整体
       const stats = await Promise.all(
-        tables.map(async (table) => {
+        tables.map(async ({ name, comment }) => {
           const rc = await db
-            .estimateRowCount(table)
+            .estimateRowCount(name)
             .catch(() => ({ value: null, isEstimate: true }));
           return {
-            table,
+            table: name,
+            comment,
             rowCount: rc.value,
             rowCountIsEstimate: rc.isEstimate,
           };
@@ -62,12 +64,12 @@ export function registerResources(server: McpServer): void {
     new ResourceTemplate("db://table/{name}", {
       list: async () => {
         if (!db.isConnected()) return { resources: [] };
-        const tables = await db.listTables().catch(() => [] as string[]);
+        const tables = await db.listTables().catch(() => [] as TableInfo[]);
         return {
-          resources: tables.map((t) => ({
-            uri: `db://table/${encodeURIComponent(t)}`,
-            name: t,
-            description: `表 ${t} 的列定义与索引`,
+          resources: tables.map(({ name }) => ({
+            uri: `db://table/${encodeURIComponent(name)}`,
+            name,
+            description: `表 ${name} 的列定义与索引`,
             mimeType: "application/json",
           })),
         };

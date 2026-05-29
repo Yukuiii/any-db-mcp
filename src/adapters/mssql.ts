@@ -6,6 +6,7 @@ import type {
   TableColumn,
   TableDescription,
   TableIndex,
+  TableInfo,
   TableRowCount,
   TransactionResult,
   TransactionStepResult,
@@ -153,14 +154,23 @@ export class MSSQLAdapter implements DatabaseAdapter {
     return { committed: true, steps, failedAt: null, error: null };
   }
 
-  /** 列出当前数据库的所有用户表(默认 dbo schema) */
-  async listTables(): Promise<string[]> {
+  /** 列出当前数据库的所有用户表(默认 dbo schema,含表注释) */
+  async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const r = await this.pool!.request().query(
-        "SELECT name FROM sys.tables WHERE schema_id = SCHEMA_ID('dbo') ORDER BY name"
-      );
-      return (r.recordset ?? []).map((row: { name: string }) => row.name);
+      // LEFT JOIN extended_properties 取表级 MS_Description(minor_id=0);value 为 sql_variant,CAST 成文本
+      const r = await this.pool!.request().query(`
+        SELECT t.name AS name, CAST(ep.value AS NVARCHAR(MAX)) AS comment
+        FROM sys.tables t
+        LEFT JOIN sys.extended_properties ep
+          ON ep.major_id = t.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
+        WHERE t.schema_id = SCHEMA_ID('dbo')
+        ORDER BY t.name
+      `);
+      return (r.recordset ?? []).map((row: { name: string; comment: string | null }) => ({
+        name: row.name,
+        comment: row.comment ?? null,
+      }));
     });
   }
 
@@ -169,7 +179,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
     return this.withRetry(async () => {
       this.ensureConnected();
 
-      // 列信息(用参数化避免注入)
+      // 列信息(用参数化避免注入);LEFT JOIN extended_properties 取列级 MS_Description
       const colRes = await this.pool!
         .request()
         .input("table", sql.NVarChar, table)
@@ -180,10 +190,13 @@ export class MSSQLAdapter implements DatabaseAdapter {
             c.max_length AS max_length,
             c.is_nullable AS is_nullable,
             dc.definition AS default_value,
-            c.is_identity AS is_identity
+            c.is_identity AS is_identity,
+            CAST(ep.value AS NVARCHAR(MAX)) AS column_comment
           FROM sys.columns c
           INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
           LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+          LEFT JOIN sys.extended_properties ep
+            ON ep.major_id = c.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
           WHERE c.object_id = OBJECT_ID(@table)
           ORDER BY c.column_id
         `);
@@ -195,6 +208,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           is_nullable: boolean;
           default_value: string | null;
           is_identity: boolean;
+          column_comment: string | null;
         }) => ({
           name: row.column_name,
           type: row.data_type,
@@ -202,6 +216,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           defaultValue: row.default_value,
           key: "",
           extra: row.is_identity ? "identity" : "",
+          comment: row.column_comment ?? null,
         })
       );
 

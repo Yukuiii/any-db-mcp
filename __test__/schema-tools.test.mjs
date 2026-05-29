@@ -17,8 +17,8 @@ function createSchemaAdapter(overrides = {}) {
     users: {
       table: "users",
       columns: [
-        { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "" },
-        { name: "email", type: "varchar(255)", nullable: false, defaultValue: null, key: "UNI", extra: "" },
+        { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "", comment: null },
+        { name: "email", type: "varchar(255)", nullable: false, defaultValue: null, key: "UNI", extra: "", comment: null },
       ],
       indexes: [{ name: "users_email_key", columns: ["email"], unique: true }],
       foreignKeys: [],
@@ -26,8 +26,8 @@ function createSchemaAdapter(overrides = {}) {
     orders: {
       table: "orders",
       columns: [
-        { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "" },
-        { name: "user_id", type: "integer", nullable: false, defaultValue: null, key: "MUL", extra: "" },
+        { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "", comment: null },
+        { name: "user_id", type: "integer", nullable: false, defaultValue: null, key: "MUL", extra: "", comment: null },
       ],
       indexes: [],
       foreignKeys: [
@@ -42,8 +42,8 @@ function createSchemaAdapter(overrides = {}) {
     audit_log: {
       table: "audit_log",
       columns: [
-        { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "" },
-        { name: "payload", type: "json", nullable: true, defaultValue: null, key: "", extra: "" },
+        { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "", comment: null },
+        { name: "payload", type: "json", nullable: true, defaultValue: null, key: "", extra: "", comment: null },
       ],
       indexes: [],
       foreignKeys: [],
@@ -68,7 +68,11 @@ function createSchemaAdapter(overrides = {}) {
       return { committed: true, steps: [], failedAt: null, error: null };
     },
     async listTables() {
-      return ["users", "orders", "audit_log"];
+      return [
+        { name: "users", comment: null },
+        { name: "orders", comment: null },
+        { name: "audit_log", comment: null },
+      ];
     },
     async describeTable(table) {
       if (overrides.failTable === table) {

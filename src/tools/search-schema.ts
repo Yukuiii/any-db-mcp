@@ -42,7 +42,7 @@ export function registerSearchSchemaTool(server: McpServer): void {
         // 并行 describe 各表:串行往返在大库下很慢,改为并发由连接池自动限流。
         // 按 listTables 顺序聚合,保证 matches / failedTables 输出顺序确定。
         const perTable = await Promise.all(
-          tables.map(async (table) => {
+          tables.map(async ({ name: table }) => {
             const tableMatches: SchemaSearchMatch[] = [];
             if (includesKeyword(table, normalizedKeyword)) {
               tableMatches.push({ kind: "table", matchedBy: "table", table });

@@ -6,6 +6,7 @@ import type {
   TableDescription,
   TableColumn,
   TableIndex,
+  TableInfo,
   TableRowCount,
   TransactionResult,
   TransactionStepResult,
@@ -131,18 +132,23 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     }
   }
 
-  /** 列出当前连接库（默认 public schema）下的所有表 */
-  async listTables(): Promise<string[]> {
+  /** 列出当前连接库（默认 public schema）下的所有表(含表注释) */
+  async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
+      // 用 pg_class 取 oid 以便 obj_description 拿表注释;relkind='r' 仅普通表,与原 BASE TABLE 一致
       const sql = `
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-        ORDER BY table_name
+        SELECT c.relname AS name, obj_description(c.oid, 'pg_class') AS comment
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+        ORDER BY c.relname
       `;
       const result = await this.pool!.query(sql);
-      return result.rows.map((row) => row.table_name as string);
+      return result.rows.map((row) => ({
+        name: row.name as string,
+        comment: (row.comment as string | null) ?? null,
+      }));
     });
   }
 
@@ -151,10 +157,14 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     return this.withRetry(async () => {
       this.ensureConnected();
 
-      // 列信息(参数化,避免注入)
+      // 列信息(参数化,避免注入);col_description 按 schema.table 的 regclass + 列序号取列注释
       const colSql = `
         SELECT column_name, data_type, is_nullable, column_default,
-               character_maximum_length, numeric_precision
+               character_maximum_length, numeric_precision,
+               col_description(
+                 (quote_ident(table_schema) || '.' || quote_ident(table_name))::regclass,
+                 ordinal_position
+               ) AS column_comment
         FROM information_schema.columns
         WHERE table_name = $1 AND table_schema = 'public'
         ORDER BY ordinal_position
@@ -167,6 +177,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         defaultValue: (row.column_default as string | null) ?? null,
         key: "",
         extra: "",
+        comment: (row.column_comment as string | null) ?? null,
       }));
 
       // 索引信息
