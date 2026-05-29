@@ -10,7 +10,7 @@
 
 - **统一适配**：MySQL / PostgreSQL / SQLite / MSSQL 四种数据库共用同一套工具接口
 - **双传输模式**:`stdio` 本地子进程 + `Streamable HTTP` 远程,后者带 stateful session 与可选 Bearer Token 鉴权
-- **MCP Resources 暴露 schema**:`db://tables` 与 `db://table/{name}` 让客户端主动消化库结构,大幅减少每次对话重复 describe 的 token 开销
+- **MCP Resources 暴露 schema**:`db://tables`、`db://table/{name}` 与 `db://table/{schema}/{name}` 让客户端主动消化库结构,大幅减少每次对话重复 describe 的 token 开销
 - **三档权限模式**：`readonly` / `readwrite` / `full`，启动时由环境变量决定，**运行时不可篡改**（5 层防 LLM 提权设计）
 - **事务支持**：单工具批量提交，任一失败自动回滚
 - **连接弹性**：TCP keepalive + 连接丢失自动重建并重试 + 健康检查工具
@@ -105,7 +105,7 @@ node dist/index.js
 | `DB_USER` | 数据库用户名 | `root` |
 | `DB_PASSWORD` | 数据库密码 | （空） |
 | `DB_NAME` | 默认数据库 | （空） |
-| `DB_SCHEMA` | 仅 PostgreSQL/MSSQL:schema 名称 | PG: `public` / MSSQL: `dbo` |
+| `DB_SCHEMA` | 仅 PostgreSQL/MSSQL:schema 名称；空值表示所有非系统 schema | （空） |
 | `DB_FILEPATH` | SQLite 数据库文件路径 | （空） |
 | `DB_ENCRYPT` | 仅 MSSQL：是否启用 TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | 仅 MSSQL：是否信任自签证书 | `false` |
@@ -145,7 +145,7 @@ LLM 调用 `connect` 工具时的入参示例：
   "user": "postgres",
   "password": "xxx",
   "database": "mydb",
-  "schema": "public"
+  "schema": "billing"
 }
 ```
 
@@ -168,7 +168,7 @@ LLM 调用 `connect` 工具时的入参示例：
   "user": "sa",
   "password": "xxx",
   "database": "mydb",
-  "schema": "dbo",
+  "schema": "sales",
   "encrypt": true,
   "trustServerCertificate": false
 }
@@ -242,21 +242,21 @@ npx @sakura0v0/any-db-mcp
 ### 表信息列表响应
 
 `list_tables`、`connect` 和已连接状态下的 `connection_status` 都会返回 `tableCount` 与
-`tables`。`tables` 是结构化表信息数组，不是字符串数组：
+`tables`。`tables` 是结构化表信息数组，不是字符串数组；PostgreSQL/MSSQL 会带 `schema`：
 
 ```json
 {
   "success": true,
   "tableCount": 2,
   "tables": [
-    { "name": "users", "comment": "系统用户" },
-    { "name": "orders", "comment": null }
+    { "schema": "public", "name": "users", "comment": "系统用户" },
+    { "schema": "billing", "name": "orders", "comment": null }
   ],
   "elapsedMs": 4
 }
 ```
 
-`comment` 来自数据库原生表注释；无注释或 SQLite 这类无原生表注释的数据库返回 `null`。
+`schema` 在 MySQL/SQLite 中为 `null`；`comment` 来自数据库原生表注释，无注释或 SQLite 这类无原生表注释的数据库返回 `null`。
 
 ## search_schema 快速定位
 
@@ -270,11 +270,12 @@ npx @sakura0v0/any-db-mcp
 
 ## describe_table 增强响应
 
-调用 `describe_table` 时可传入 `sampleLimit`（默认 3，0 表示不采样，最大 20）。响应一次性返回结构、索引、行数估算与采样数据：
+调用 `describe_table` 时可传入 `schema` 和 `sampleLimit`（默认 3，0 表示不采样，最大 20）。响应一次性返回结构、索引、行数估算与采样数据：
 
 ```json
 {
   "success": true,
+  "schema": "public",
   "table": "users",
   "columns": [
     { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null, "comment": "用户 ID" },
@@ -313,6 +314,7 @@ npx @sakura0v0/any-db-mcp
 |-----|------|------|
 | `db://tables` | 静态 | 当前库的所有表名 + 表注释 + 估算行数,JSON 格式,适合 LLM 一次摸清规模量级 |
 | `db://table/{name}` | 动态模板 | 单表的列定义与索引,每张表自动一个 URI(由 server 根据当前库动态生成) |
+| `db://table/{schema}/{name}` | 动态模板 | PostgreSQL/MSSQL 跨 schema 精确定位单表结构 |
 
 `connect` / `disconnect` 成功后会发送 `notifications/resources/list_changed`,
 支持订阅的客户端会自动刷新可用资源列表。未连接时读 `db://tables` 返回 `connected: false`
@@ -323,17 +325,19 @@ npx @sakura0v0/any-db-mcp
 ```json
 {
   "connected": true,
-  "databaseType": "mysql",
+  "databaseType": "postgresql",
   "tableCount": 2,
   "tables": [
     {
       "table": "users",
+      "schema": "public",
       "comment": "系统用户",
       "rowCount": 12453,
       "rowCountIsEstimate": true
     },
     {
       "table": "orders",
+      "schema": "billing",
       "comment": null,
       "rowCount": 98210,
       "rowCountIsEstimate": true
@@ -386,7 +390,7 @@ src/
     ├── describe-table.ts describe_table 工具
     ├── search-schema.ts  search_schema 工具
     ├── explain.ts        explain 工具
-    ├── resources.ts      MCP Resources(db://tables + db://table/{name})
+    ├── resources.ts      MCP Resources(db://tables + db://table/{name} + db://table/{schema}/{name})
     ├── permission.ts     权限检查 helper
     ├── response.ts       统一响应工厂 ok() / fail()
     └── sql-patterns.ts   SQL 类型正则 + 多语句拦截

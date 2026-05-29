@@ -15,6 +15,7 @@ function parseToolJson(response) {
 function createSchemaAdapter(overrides = {}) {
   const descriptions = {
     users: {
+      schema: null,
       table: "users",
       columns: [
         { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "", comment: null },
@@ -24,6 +25,7 @@ function createSchemaAdapter(overrides = {}) {
       foreignKeys: [],
     },
     orders: {
+      schema: null,
       table: "orders",
       columns: [
         { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "", comment: null },
@@ -40,6 +42,7 @@ function createSchemaAdapter(overrides = {}) {
       ],
     },
     audit_log: {
+      schema: null,
       table: "audit_log",
       columns: [
         { name: "id", type: "integer", nullable: false, defaultValue: null, key: "PRI", extra: "", comment: null },
@@ -69,16 +72,16 @@ function createSchemaAdapter(overrides = {}) {
     },
     async listTables() {
       return [
-        { name: "users", comment: null },
-        { name: "orders", comment: null },
-        { name: "audit_log", comment: null },
+        { schema: null, name: "users", comment: null },
+        { schema: null, name: "orders", comment: null },
+        { schema: null, name: "audit_log", comment: null },
       ];
     },
     async describeTable(table) {
       if (overrides.failTable === table) {
         throw new Error(`describe failed: ${table}`);
       }
-      return descriptions[table] ?? { table, columns: [], indexes: [], foreignKeys: [] };
+      return descriptions[table] ?? { schema: null, table, columns: [], indexes: [], foreignKeys: [] };
     },
     async sampleData(table, limit) {
       if (overrides.sampleFails) {
@@ -159,7 +162,7 @@ describe("search_schema tool", () => {
     assert.equal(byColumn.scannedTableCount, 3);
     assert.deepEqual(byColumn.matches.map((match) => match.column), ["email"]);
     assert.deepEqual(byType.matches.map((match) => match.type), ["json"]);
-    assert.deepEqual(byTable.matches[0], { kind: "table", matchedBy: "table", table: "orders" });
+    assert.deepEqual(byTable.matches[0], { kind: "table", matchedBy: "table", schema: null, table: "orders" });
   });
 
   test("单表 describe 失败时返回 failedTables 并继续搜索其它表", async () => {

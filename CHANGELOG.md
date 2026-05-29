@@ -6,7 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Configurable PostgreSQL/MSSQL schema**: `connect.schema` and `DB_SCHEMA` now select the schema used by table listing, table description, row-count estimation, and sampling. Defaults remain `public` for PostgreSQL and `dbo` for MSSQL.
+- **Schema-aware PostgreSQL/MSSQL discovery**: when `connect.schema` / `DB_SCHEMA` is empty, table discovery now scans all non-system schemas; when set, table listing, description, row-count estimation, and sampling are scoped to that schema.
+- **Schema-qualified metadata**: `tables[]`, `search_schema`, `describe_table`, and `db://tables` responses now include `schema`, and `db://table/{schema}/{name}` is available for schema-qualified resources.
 
 ## [1.2.2] — 2026-05-29
 

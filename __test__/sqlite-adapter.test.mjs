@@ -55,8 +55,8 @@ describe("SQLiteAdapter", () => {
     const rows = await adapter.query("SELECT email FROM users ORDER BY email");
 
     assert.deepEqual(tables, [
-      { name: "groups", comment: null },
-      { name: "users", comment: null },
+      { schema: null, name: "groups", comment: null },
+      { schema: null, name: "users", comment: null },
     ]);
     assert.deepEqual(rows, [{ email: "a@example.com" }, { email: "b@example.com" }]);
   });

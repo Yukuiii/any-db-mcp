@@ -145,6 +145,7 @@ export class MySQLAdapter implements DatabaseAdapter {
          ORDER BY TABLE_NAME`
       );
       return (rows as Record<string, unknown>[]).map((row) => ({
+        schema: null,
         name: row["name"] as string,
         comment: normalizeComment(row["comment"]),
       }));
@@ -202,7 +203,7 @@ export class MySQLAdapter implements DatabaseAdapter {
         constraintName: row["constraint_name"] as string,
       }));
 
-      return { table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
+      return { schema: null, table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
     });
   }
 

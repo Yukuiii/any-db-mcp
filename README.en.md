@@ -10,7 +10,7 @@ English | [简体中文](./README.md)
 
 - **Unified adapter**: One tool surface for MySQL, PostgreSQL, SQLite, and MSSQL
 - **Dual transport**: `stdio` for local subprocess + `Streamable HTTP` for remote access, the latter with stateful sessions and optional Bearer Token auth
-- **MCP Resources for schema**: `db://tables` and `db://table/{name}` let clients subscribe to live schema metadata, cutting the per-conversation token cost of repeated describe calls
+- **MCP Resources for schema**: `db://tables`, `db://table/{name}`, and `db://table/{schema}/{name}` let clients subscribe to live schema metadata, cutting the per-conversation token cost of repeated describe calls
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
 - **Transactions**: Batch multi-statement commit in a single tool call, auto-rollback on any failure
 - **Connection resilience**: TCP keepalive + automatic pool rebuild & retry on connection loss + health-check tool
@@ -105,7 +105,7 @@ Corresponding MCP client config:
 | `DB_USER` | Database user | `root` |
 | `DB_PASSWORD` | Database password | (empty) |
 | `DB_NAME` | Default database | (empty) |
-| `DB_SCHEMA` | PostgreSQL/MSSQL only: schema name | PG: `public` / MSSQL: `dbo` |
+| `DB_SCHEMA` | PostgreSQL/MSSQL only: schema name; empty means all non-system schemas | (empty) |
 | `DB_FILEPATH` | SQLite database file path | (empty) |
 | `DB_ENCRYPT` | MSSQL only: enable TLS encryption | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL only: trust self-signed certificate | `false` |
@@ -145,7 +145,7 @@ Example inputs the LLM passes to the `connect` tool:
   "user": "postgres",
   "password": "xxx",
   "database": "mydb",
-  "schema": "public"
+  "schema": "billing"
 }
 ```
 
@@ -168,7 +168,7 @@ Example inputs the LLM passes to the `connect` tool:
   "user": "sa",
   "password": "xxx",
   "database": "mydb",
-  "schema": "dbo",
+  "schema": "sales",
   "encrypt": true,
   "trustServerCertificate": false
 }
@@ -243,22 +243,23 @@ Every tool returns a unified JSON structure.
 
 `list_tables`, `connect`, and connected `connection_status` responses all include
 `tableCount` and `tables`. `tables` is a structured table-info array, not a
-string array:
+string array; PostgreSQL/MSSQL entries include `schema`:
 
 ```json
 {
   "success": true,
   "tableCount": 2,
   "tables": [
-    { "name": "users", "comment": "Application users" },
-    { "name": "orders", "comment": null }
+    { "schema": "public", "name": "users", "comment": "Application users" },
+    { "schema": "billing", "name": "orders", "comment": null }
   ],
   "elapsedMs": 4
 }
 ```
 
-`comment` comes from the database's native table comment metadata; databases
-without table comments, such as SQLite, return `null`.
+`schema` is `null` for MySQL/SQLite. `comment` comes from the database's native
+table comment metadata; databases without table comments, such as SQLite,
+return `null`.
 
 ## search_schema Quick Lookup
 
@@ -272,11 +273,12 @@ without table comments, such as SQLite, return `null`.
 
 ## describe_table Enriched Response
 
-`describe_table` accepts an optional `sampleLimit` (default `3`, `0` disables sampling, max `20`). It returns structure, indexes, estimated row count, and sample rows in one shot:
+`describe_table` accepts optional `schema` and `sampleLimit` (default `3`, `0` disables sampling, max `20`). It returns structure, indexes, estimated row count, and sample rows in one shot:
 
 ```json
 {
   "success": true,
+  "schema": "public",
   "table": "users",
   "columns": [
     { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null, "comment": "User ID" },
@@ -316,6 +318,7 @@ firing on connect/disconnect):
 |-----|------|-------------|
 | `db://tables` | Static | All table names + comments + estimated row counts as JSON; lets the LLM size up the database in one read |
 | `db://table/{name}` | Dynamic template | Column and index definitions per table; one URI per table, generated from the live connection |
+| `db://table/{schema}/{name}` | Dynamic template | Schema-qualified table structure for PostgreSQL/MSSQL |
 
 Successful `connect` / `disconnect` calls emit
 `notifications/resources/list_changed`; subscribing clients refresh
@@ -327,17 +330,19 @@ Example `db://tables` response:
 ```json
 {
   "connected": true,
-  "databaseType": "mysql",
+  "databaseType": "postgresql",
   "tableCount": 2,
   "tables": [
     {
       "table": "users",
+      "schema": "public",
       "comment": "Application users",
       "rowCount": 12453,
       "rowCountIsEstimate": true
     },
     {
       "table": "orders",
+      "schema": "billing",
       "comment": null,
       "rowCount": 98210,
       "rowCountIsEstimate": true
@@ -392,7 +397,7 @@ src/
     ├── describe-table.ts describe_table tool
     ├── search-schema.ts  search_schema tool
     ├── explain.ts        explain tool
-    ├── resources.ts      MCP Resources (db://tables + db://table/{name})
+    ├── resources.ts      MCP Resources (db://tables + db://table/{name} + db://table/{schema}/{name})
     ├── permission.ts     Permission check helper
     ├── response.ts       Unified response factory: ok() / fail()
     └── sql-patterns.ts   SQL-type regexes + multi-statement guard

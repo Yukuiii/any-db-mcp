@@ -67,18 +67,18 @@ class DatabaseManager {
   }
 
   /** 查看表结构 */
-  async describeTable(table: string): Promise<TableDescription> {
-    return this.getAdapter().describeTable(table);
+  async describeTable(table: string, schema?: string): Promise<TableDescription> {
+    return this.getAdapter().describeTable(table, schema);
   }
 
   /** 采样表中前 N 行数据 */
-  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
-    return this.getAdapter().sampleData(table, limit);
+  async sampleData(table: string, limit: number, schema?: string): Promise<Record<string, unknown>[]> {
+    return this.getAdapter().sampleData(table, limit, schema);
   }
 
   /** 获取表行数(估算或精确) */
-  async estimateRowCount(table: string): Promise<TableRowCount> {
-    return this.getAdapter().estimateRowCount(table);
+  async estimateRowCount(table: string, schema?: string): Promise<TableRowCount> {
+    return this.getAdapter().estimateRowCount(table, schema);
   }
 
   /** 检查是否已连接 */

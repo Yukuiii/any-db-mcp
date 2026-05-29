@@ -1,8 +1,9 @@
 /** 数据库类型 */
 export type DatabaseType = "mysql" | "postgresql" | "sqlite" | "mssql";
 
-/** 表清单条目:表名 + 表注释(无注释或 SQLite 无原生概念时为 null) */
+/** 表清单条目:可选 schema + 表名 + 表注释(无注释或 SQLite 无原生概念时为 null) */
 export interface TableInfo {
+  schema: string | null;
   name: string;
   comment: string | null;
 }
@@ -36,6 +37,7 @@ export interface ForeignKey {
 
 /** 表结构描述 */
 export interface TableDescription {
+  schema: string | null;
   table: string;
   columns: TableColumn[];
   indexes: TableIndex[];
@@ -106,12 +108,12 @@ export interface DatabaseAdapter {
   /** 列出当前连接数据库的所有表(含表注释) */
   listTables(): Promise<TableInfo[]>;
 
-  /** 查看表结构 */
-  describeTable(table: string): Promise<TableDescription>;
+  /** 查看表结构;支持 PostgreSQL/MSSQL 传入 schema 精确定位 */
+  describeTable(table: string, schema?: string): Promise<TableDescription>;
 
   /** 采样表中前 N 行数据,用于让 LLM 直观了解字段值 */
-  sampleData(table: string, limit: number): Promise<Record<string, unknown>[]>;
+  sampleData(table: string, limit: number, schema?: string): Promise<Record<string, unknown>[]>;
 
   /** 获取表行数(优先使用元数据估算,SQLite 直接 COUNT) */
-  estimateRowCount(table: string): Promise<TableRowCount>;
+  estimateRowCount(table: string, schema?: string): Promise<TableRowCount>;
 }

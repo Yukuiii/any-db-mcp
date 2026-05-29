@@ -38,12 +38,12 @@ function createStatusAdapter(overrides = {}) {
         throw new Error("list tables failed");
       }
       return [
-        { name: "users", comment: null },
-        { name: "orders", comment: null },
+        { schema: null, name: "users", comment: null },
+        { schema: null, name: "orders", comment: null },
       ];
     },
     async describeTable() {
-      return { table: "", columns: [], indexes: [], foreignKeys: [] };
+      return { schema: null, table: "", columns: [], indexes: [], foreignKeys: [] };
     },
     async sampleData() {
       return [];
@@ -88,8 +88,8 @@ describe("connection_status tool", () => {
     assert.equal(body.permissionMode, "readwrite");
     assert.equal(body.tableCount, 2);
     assert.deepEqual(body.tables, [
-      { name: "users", comment: null },
-      { name: "orders", comment: null },
+      { schema: null, name: "users", comment: null },
+      { schema: null, name: "orders", comment: null },
     ]);
   });
 

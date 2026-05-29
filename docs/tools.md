@@ -14,13 +14,13 @@
 | user | string | 否 | 用户名（SQLite 不需要） |
 | password | string | 否 | 密码（SQLite 不需要） |
 | database | string | 否 | 数据库名（SQLite 不需要） |
-| schema | string | 否 | 仅 PostgreSQL/MSSQL:schema 名称，PG 默认 public，MSSQL 默认 dbo |
+| schema | string | 否 | 仅 PostgreSQL/MSSQL:schema 名称；不传表示所有非系统 schema |
 | filepath | string | 否 | SQLite 文件路径（仅 SQLite） |
 | encrypt | boolean | 否 | MSSQL TLS 加密，默认 true |
 | trustServerCertificate | boolean | 否 | MSSQL 信任自签证书，默认 false |
 
 成功响应包含：`message`、`type`、`connection`、`permissionMode`、`tableCount`、`tables`。
-`tables` 为 `{ name: string, comment: string | null }[]`。
+`tables` 为 `{ schema: string | null, name: string, comment: string | null }[]`。
 
 ### disconnect
 
@@ -49,7 +49,7 @@
 列出当前库所有表名和表注释。无参数。
 
 返回：`tableCount`、`tables`、`elapsedMs`。
-`tables` 为 `{ name: string, comment: string | null }[]`。
+`tables` 为 `{ schema: string | null, name: string, comment: string | null }[]`。
 
 ### describe_table
 
@@ -58,9 +58,10 @@
 | 参数 | 类型 | 必需 | 说明 |
 |------|------|:---:|------|
 | table | string | 是 | 表名 |
+| schema | string | 否 | 仅 PostgreSQL/MSSQL:schema 名称，用于跨 schema 精确定位 |
 | sampleLimit | number | 否 | 采样行数，默认 3，0 不采样，最大 20 |
 
-返回：`table`、`columns`、`indexes`、`foreignKeys`、`rowCount`、`rowCountIsEstimate`、`sampleCount`、`sample`、`elapsedMs`。
+返回：`schema`、`table`、`columns`、`indexes`、`foreignKeys`、`rowCount`、`rowCountIsEstimate`、`sampleCount`、`sample`、`elapsedMs`。
 
 ### search_schema
 
@@ -70,7 +71,7 @@
 |------|------|:---:|------|
 | keyword | string | 是 | 搜索关键词，大小写不敏感 |
 
-返回：`keyword`、`scannedTableCount`、`matchCount`、`totalMatchCount`、`limit`、`truncated`、`matches`、`failedTableCount`、`failedTables`、`elapsedMs`。
+返回：`keyword`、`scannedTableCount`、`matchCount`、`totalMatchCount`、`limit`、`truncated`、`matches`、`failedTableCount`、`failedTables`、`elapsedMs`；`matches` 与 `failedTables` 条目会包含 `schema`。
 
 单个表结构读取失败不会让整个搜索失败，会记录到 `failedTables` 并继续搜索其他表。
 

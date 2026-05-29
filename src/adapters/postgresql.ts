@@ -19,7 +19,7 @@ export interface PostgreSQLConfig {
   user: string;
   password: string;
   database: string;
-  /** 默认 public,用于限定 list/describe/sample/rowCount 的 schema */
+  /** 空值表示所有非系统 schema,有值时限定 list/describe/sample/rowCount 的 schema */
   schema?: string;
 }
 
@@ -28,11 +28,11 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   readonly type = "postgresql" as const;
   private pool: pg.Pool | null = null;
   private config: PostgreSQLConfig;
-  private schema: string;
+  private schema: string | null;
 
   constructor(config: PostgreSQLConfig) {
     this.config = config;
-    this.schema = normalizeSchema(config.schema, "public");
+    this.schema = normalizeSchema(config.schema);
   }
 
   /** 创建连接池并验证可用性 */
@@ -136,20 +136,25 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     }
   }
 
-  /** 列出当前连接库指定 schema 下的所有表(含表注释) */
+  /** 列出当前连接库指定 schema 或所有非系统 schema 下的所有表(含表注释) */
   async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
       // 用 pg_class 取 oid 以便 obj_description 拿表注释;普通表和分区表父表都属于 BASE TABLE 语义
       const sql = `
-        SELECT c.relname AS name, obj_description(c.oid, 'pg_class') AS comment
+        SELECT n.nspname AS schema, c.relname AS name, obj_description(c.oid, 'pg_class') AS comment
         FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
-        ORDER BY c.relname
+        WHERE c.relkind IN ('r', 'p')
+          AND (
+            ($1::text IS NULL AND n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg!_%' ESCAPE '!')
+            OR n.nspname = $1
+          )
+        ORDER BY n.nspname, c.relname
       `;
       const result = await this.pool!.query(sql, [this.schema]);
       return result.rows.map((row) => ({
+        schema: row.schema as string,
         name: row.name as string,
         comment: (row.comment as string | null) ?? null,
       }));
@@ -157,9 +162,13 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   }
 
   /** 查看表结构 */
-  async describeTable(table: string): Promise<TableDescription> {
+  async describeTable(table: string, schema?: string): Promise<TableDescription> {
     return this.withRetry(async () => {
       this.ensureConnected();
+      const effectiveSchema = await this.resolveTableSchema(table, schema);
+      if (!effectiveSchema) {
+        return { schema: null, table, columns: [], indexes: [], foreignKeys: [] };
+      }
 
       // 列信息(参数化,避免注入);col_description 按 schema.table 的 regclass + 列序号取列注释
       const colSql = `
@@ -173,7 +182,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         WHERE table_name = $1 AND table_schema = $2
         ORDER BY ordinal_position
       `;
-      const colResult = await this.pool!.query(colSql, [table, this.schema]);
+      const colResult = await this.pool!.query(colSql, [table, effectiveSchema]);
       const columns: TableColumn[] = colResult.rows.map((row) => ({
         name: row.column_name as string,
         type: row.data_type as string,
@@ -197,7 +206,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         WHERE t.relname = $1 AND n.nspname = $2 AND t.relkind IN ('r', 'p')
         ORDER BY i.relname, a.attnum
       `;
-      const idxResult = await this.pool!.query(idxSql, [table, this.schema]);
+      const idxResult = await this.pool!.query(idxSql, [table, effectiveSchema]);
       const indexMap = new Map<string, TableIndex>();
       for (const row of idxResult.rows) {
         const name = row.index_name as string;
@@ -220,7 +229,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         JOIN pg_namespace n ON n.oid = t.relnamespace
         WHERE t.relname = $1 AND n.nspname = $2 AND ix.indisprimary
       `;
-      const pkResult = await this.pool!.query(pkSql, [table, this.schema]);
+      const pkResult = await this.pool!.query(pkSql, [table, effectiveSchema]);
       const pkColumns = new Set(pkResult.rows.map((r) => r.column_name as string));
       for (const col of columns) {
         if (pkColumns.has(col.name)) col.key = "PRI";
@@ -242,7 +251,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
           AND tc.table_name = $1 AND tc.table_schema = $2
         ORDER BY tc.constraint_name
       `;
-      const fkResult = await this.pool!.query(fkSql, [table, this.schema]);
+      const fkResult = await this.pool!.query(fkSql, [table, effectiveSchema]);
       const foreignKeys: ForeignKey[] = fkResult.rows.map((row) => ({
         column: row.column_name as string,
         referencedTable: row.referenced_table as string,
@@ -250,15 +259,17 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         constraintName: row.constraint_name as string,
       }));
 
-      return { table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
+      return { schema: effectiveSchema, table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
     });
   }
 
   /** 采样前 N 行数据 */
-  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+  async sampleData(table: string, limit: number, schema?: string): Promise<Record<string, unknown>[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const ident = `${quotePgIdent(this.schema)}.${quotePgIdent(table)}`;
+      const effectiveSchema = await this.resolveTableSchema(table, schema);
+      if (!effectiveSchema) return [];
+      const ident = `${quotePgIdent(effectiveSchema)}.${quotePgIdent(table)}`;
       const safeLimit = clampLimit(limit);
       const result = await this.pool!.query(`SELECT * FROM ${ident} LIMIT ${safeLimit}`);
       return result.rows;
@@ -266,16 +277,18 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   }
 
   /** 用 pg_class.reltuples 估算行数。从未 ANALYZE 时为 -1,返回 null。 */
-  async estimateRowCount(table: string): Promise<TableRowCount> {
+  async estimateRowCount(table: string, schema?: string): Promise<TableRowCount> {
     return this.withRetry(async () => {
       this.ensureConnected();
+      const effectiveSchema = await this.resolveTableSchema(table, schema);
+      if (!effectiveSchema) return { value: null, isEstimate: true };
       const sql = `
         SELECT c.reltuples::bigint AS rows
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relname = $1 AND n.nspname = $2 AND c.relkind IN ('r', 'p')
       `;
-      const result = await this.pool!.query(sql, [table, this.schema]);
+      const result = await this.pool!.query(sql, [table, effectiveSchema]);
       if (result.rows.length === 0) {
         return { value: null, isEstimate: true };
       }
@@ -323,6 +336,29 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
       throw new Error("PostgreSQL 未连接");
     }
   }
+
+  /** 解析表所属 schema;未指定时只允许唯一匹配,避免跨 schema 同名表误查。 */
+  private async resolveTableSchema(table: string, requestedSchema?: string): Promise<string | null> {
+    const explicitSchema = normalizeSchema(requestedSchema) ?? this.schema;
+    if (explicitSchema) return explicitSchema;
+
+    const sql = `
+      SELECT n.nspname AS schema
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname = $1
+        AND c.relkind IN ('r', 'p')
+        AND n.nspname <> 'information_schema'
+        AND n.nspname NOT LIKE 'pg!_%' ESCAPE '!'
+      ORDER BY n.nspname
+    `;
+    const result = await this.pool!.query(sql, [table]);
+    if (result.rows.length === 0) return null;
+    if (result.rows.length === 1) return result.rows[0].schema as string;
+
+    const candidates = result.rows.map((row) => `${row.schema as string}.${table}`).join(", ");
+    throw new Error(`表 ${table} 在多个 schema 中存在,请指定 schema。候选:${candidates}`);
+  }
 }
 
 /** 判定是否为 PostgreSQL 连接级错误（值得重连重试） */
@@ -353,10 +389,10 @@ function quotePgIdent(name: string): string {
   return '"' + name.replace(/"/g, '""') + '"';
 }
 
-/** 归一化 schema 名称,空值使用适配器默认 schema。 */
-function normalizeSchema(value: string | undefined, defaultSchema: string): string {
+/** 归一化 schema 名称,空值表示不限定 schema。 */
+function normalizeSchema(value: string | undefined): string | null {
   const trimmed = value?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed : defaultSchema;
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /** 采样行数夹紧到 [0, 20] */

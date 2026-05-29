@@ -35,7 +35,7 @@ interface TableColumn {
 }
 
 interface TableInfo {
-  name: string; comment: string | null;
+  schema: string | null; name: string; comment: string | null;
 }
 
 interface TableIndex {
@@ -48,7 +48,7 @@ interface ForeignKey {
 }
 
 interface TableDescription {
-  table: string; columns: TableColumn[];
+  schema: string | null; table: string; columns: TableColumn[];
   indexes: TableIndex[]; foreignKeys: ForeignKey[];
 }
 
@@ -135,15 +135,15 @@ export class OracleAdapter implements DatabaseAdapter {
     // SELECT table_name FROM user_tables
   }
 
-  async describeTable(table: string): Promise<TableDescription> {
+  async describeTable(table: string, schema?: string): Promise<TableDescription> {
     // 查 ALL_TAB_COLUMNS, ALL_INDEXES, ALL_IND_COLUMNS, ALL_CONSTRAINTS
   }
 
-  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+  async sampleData(table: string, limit: number, schema?: string): Promise<Record<string, unknown>[]> {
     // SELECT * FROM {table} WHERE ROWNUM <= {limit}
   }
 
-  async estimateRowCount(table: string): Promise<TableRowCount> {
+  async estimateRowCount(table: string, schema?: string): Promise<TableRowCount> {
     // SELECT num_rows FROM user_tables WHERE table_name = UPPER(:t)
   }
 }

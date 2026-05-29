@@ -109,7 +109,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     const rows = this.db!.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     ).all() as { name: string }[];
-    return rows.map((r) => ({ name: r.name, comment: null }));
+    return rows.map((r) => ({ schema: null, name: r.name, comment: null }));
   }
 
   /** 查看表结构 */
@@ -176,7 +176,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
       constraintName: `fk_${table}_${row.from}`,
     }));
 
-    return { table, columns, indexes, foreignKeys };
+    return { schema: null, table, columns, indexes, foreignKeys };
   }
 
   /** 采样前 N 行数据 */

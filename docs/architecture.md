@@ -62,6 +62,7 @@ Target Database
 
 ```typescript
 interface TableInfo {
+  schema: string | null;
   name: string;
   comment: string | null;
 }
@@ -76,9 +77,9 @@ interface DatabaseAdapter {
   execute(sql: string): Promise<ExecuteResult>;
   transaction(sqls: string[]): Promise<TransactionResult>;
   listTables(): Promise<TableInfo[]>;
-  describeTable(table: string): Promise<TableDescription>;
-  sampleData(table: string, limit: number): Promise<Record<string, unknown>[]>;
-  estimateRowCount(table: string): Promise<TableRowCount>;
+  describeTable(table: string, schema?: string): Promise<TableDescription>;
+  sampleData(table: string, limit: number, schema?: string): Promise<Record<string, unknown>[]>;
+  estimateRowCount(table: string, schema?: string): Promise<TableRowCount>;
 }
 ```
 
@@ -127,6 +128,7 @@ interface DatabaseAdapter {
 
 - `db://tables` — 当前库所有表名 + 表注释 + 估算行数
 - `db://table/{name}` — 单表列定义与索引（动态模板，每表一个 URI）
+- `db://table/{schema}/{name}` — PostgreSQL/MSSQL 跨 schema 精确单表结构
 
 Resources 是"声明式订阅"，由客户端缓存复用；Tools 是"命令式调用"，适合需要最新数据时。
 

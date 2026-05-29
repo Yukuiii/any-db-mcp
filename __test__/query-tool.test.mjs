@@ -36,7 +36,7 @@ function createQueryOnlyAdapter(rows) {
       return [];
     },
     async describeTable() {
-      return { table: "", columns: [], indexes: [], foreignKeys: [] };
+      return { schema: null, table: "", columns: [], indexes: [], foreignKeys: [] };
     },
     async sampleData() {
       return [];

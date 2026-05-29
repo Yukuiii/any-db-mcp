@@ -12,9 +12,10 @@ export function registerDescribeTableTool(server: McpServer): void {
     "describe_table",
     {
       description:
-        "查看指定表的详细信息,一次返回:列定义/索引/外键/估算行数/数据采样。LLM 在写 SQL 前调用此工具可同时拿到字段结构、关联关系、表大小量级、字段真实取值示例,大幅减少猜测。",
+        "查看指定表的详细信息,一次返回:列定义/索引/外键/估算行数/数据采样。PostgreSQL/MSSQL 跨 schema 同名表时应传 schema 精确定位。LLM 在写 SQL 前调用此工具可同时拿到字段结构、关联关系、表大小量级、字段真实取值示例,大幅减少猜测。",
       inputSchema: {
         table: z.string().min(1).describe("要查看的表名"),
+        schema: z.string().min(1).optional().describe("仅 PostgreSQL/MSSQL 使用:schema 名称,用于跨 schema 精确定位"),
         sampleLimit: z
           .number()
           .int()
@@ -24,20 +25,21 @@ export function registerDescribeTableTool(server: McpServer): void {
           .describe("采样数据行数,默认 3,0 表示不采样,最大 20"),
       },
     },
-    async ({ table, sampleLimit }) => {
+    async ({ table, schema, sampleLimit }) => {
       const startedAt = performance.now();
       const limit = sampleLimit ?? 3;
       try {
         // 并行拉取三类信息,任一失败由整体 catch 处理
         const [description, rowCount, sample] = await Promise.all([
-          db.describeTable(table),
-          db.estimateRowCount(table).catch(() => ({ value: null, isEstimate: true })),
+          db.describeTable(table, schema),
+          db.estimateRowCount(table, schema).catch(() => ({ value: null, isEstimate: true })),
           limit > 0
-            ? db.sampleData(table, limit).catch(() => [])
+            ? db.sampleData(table, limit, schema).catch(() => [])
             : Promise.resolve([] as Record<string, unknown>[]),
         ]);
 
         return ok({
+          schema: description.schema,
           table: description.table,
           columns: description.columns,
           indexes: description.indexes,

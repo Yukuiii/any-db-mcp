@@ -36,7 +36,7 @@ export interface DbConfig {
   readonly user: string;
   readonly password: string;
   readonly database: string;
-  /** PostgreSQL/MSSQL 专属:schema 名称,空值由适配器使用默认 schema */
+  /** PostgreSQL/MSSQL 专属:schema 名称,空值表示所有非系统 schema */
   readonly schema: string;
   /** SQLite 文件路径 */
   readonly filepath: string;

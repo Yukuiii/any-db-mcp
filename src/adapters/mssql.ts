@@ -19,7 +19,7 @@ export interface MSSQLConfig {
   user: string;
   password: string;
   database: string;
-  /** 默认 dbo,用于限定 list/describe/sample/rowCount 的 schema */
+  /** 空值表示所有非系统 schema,有值时限定 list/describe/sample/rowCount 的 schema */
   schema?: string;
   /** TLS 加密(SQL Server 2019+ 默认要求),默认 true */
   encrypt: boolean;
@@ -32,11 +32,11 @@ export class MSSQLAdapter implements DatabaseAdapter {
   readonly type = "mssql" as const;
   private pool: sql.ConnectionPool | null = null;
   private config: MSSQLConfig;
-  private schema: string;
+  private schema: string | null;
 
   constructor(config: MSSQLConfig) {
     this.config = config;
-    this.schema = normalizeSchema(config.schema, "dbo");
+    this.schema = normalizeSchema(config.schema);
   }
 
   /** 创建连接池并验证可用性 */
@@ -158,7 +158,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
     return { committed: true, steps, failedAt: null, error: null };
   }
 
-  /** 列出当前数据库指定 schema 下的所有用户表(含表注释) */
+  /** 列出当前数据库指定 schema 或所有非系统 schema 下的所有用户表(含表注释) */
   async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
@@ -167,15 +167,19 @@ export class MSSQLAdapter implements DatabaseAdapter {
         .request()
         .input("schema", sql.NVarChar, this.schema)
         .query(`
-        SELECT t.name AS name, CAST(ep.value AS NVARCHAR(MAX)) AS comment
+        SELECT s.name AS schema_name, t.name AS name, CAST(ep.value AS NVARCHAR(MAX)) AS comment
         FROM sys.tables t
         INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
         LEFT JOIN sys.extended_properties ep
           ON ep.major_id = t.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
-        WHERE s.name = @schema
-        ORDER BY t.name
+        WHERE (
+          (@schema IS NULL AND s.name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest'))
+          OR s.name = @schema
+        )
+        ORDER BY s.name, t.name
       `);
-      return (r.recordset ?? []).map((row: { name: string; comment: string | null }) => ({
+      return (r.recordset ?? []).map((row: { schema_name: string; name: string; comment: string | null }) => ({
+        schema: row.schema_name,
         name: row.name,
         comment: row.comment ?? null,
       }));
@@ -183,10 +187,14 @@ export class MSSQLAdapter implements DatabaseAdapter {
   }
 
   /** 查看表结构 */
-  async describeTable(table: string): Promise<TableDescription> {
+  async describeTable(table: string, schema?: string): Promise<TableDescription> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const objectName = quoteMssqlQualifiedIdent(this.schema, table);
+      const effectiveSchema = await this.resolveTableSchema(table, schema);
+      if (!effectiveSchema) {
+        return { schema: null, table, columns: [], indexes: [], foreignKeys: [] };
+      }
+      const objectName = quoteMssqlQualifiedIdent(effectiveSchema, table);
 
       // 列信息(用参数化避免注入);LEFT JOIN extended_properties 取列级 MS_Description
       const colRes = await this.pool!
@@ -296,15 +304,17 @@ export class MSSQLAdapter implements DatabaseAdapter {
         })
       );
 
-      return { table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
+      return { schema: effectiveSchema, table, columns, indexes: Array.from(indexMap.values()), foreignKeys };
     });
   }
 
   /** 采样前 N 行数据(MSSQL 用 TOP 而不是 LIMIT) */
-  async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
+  async sampleData(table: string, limit: number, schema?: string): Promise<Record<string, unknown>[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const ident = quoteMssqlQualifiedIdent(this.schema, table);
+      const effectiveSchema = await this.resolveTableSchema(table, schema);
+      if (!effectiveSchema) return [];
+      const ident = quoteMssqlQualifiedIdent(effectiveSchema, table);
       const safeLimit = clampLimit(limit);
       const r = await this.pool!.request().query(`SELECT TOP ${safeLimit} * FROM ${ident}`);
       return (r.recordset ?? []) as Record<string, unknown>[];
@@ -312,12 +322,14 @@ export class MSSQLAdapter implements DatabaseAdapter {
   }
 
   /** 用 sys.partitions 估算行数(堆 index_id=0,聚簇 index_id=1) */
-  async estimateRowCount(table: string): Promise<TableRowCount> {
+  async estimateRowCount(table: string, schema?: string): Promise<TableRowCount> {
     return this.withRetry(async () => {
       this.ensureConnected();
+      const effectiveSchema = await this.resolveTableSchema(table, schema);
+      if (!effectiveSchema) return { value: null, isEstimate: true };
       const r = await this.pool!
         .request()
-        .input("objectName", sql.NVarChar, quoteMssqlQualifiedIdent(this.schema, table))
+        .input("objectName", sql.NVarChar, quoteMssqlQualifiedIdent(effectiveSchema, table))
         .query(`
           SELECT SUM(p.rows) AS rows
           FROM sys.partitions p
@@ -368,6 +380,29 @@ export class MSSQLAdapter implements DatabaseAdapter {
       throw new Error("MSSQL 未连接");
     }
   }
+
+  /** 解析表所属 schema;未指定时只允许唯一匹配,避免跨 schema 同名表误查。 */
+  private async resolveTableSchema(table: string, requestedSchema?: string): Promise<string | null> {
+    const explicitSchema = normalizeSchema(requestedSchema) ?? this.schema;
+    if (explicitSchema) return explicitSchema;
+
+    const r = await this.pool!
+      .request()
+      .input("table", sql.NVarChar, table)
+      .query(`
+        SELECT s.name AS schema_name
+        FROM sys.tables t
+        INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+        WHERE t.name = @table AND s.name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest')
+        ORDER BY s.name
+      `);
+    const rows = (r.recordset ?? []) as { schema_name: string }[];
+    if (rows.length === 0) return null;
+    if (rows.length === 1) return rows[0].schema_name;
+
+    const candidates = rows.map((row) => `${row.schema_name}.${table}`).join(", ");
+    throw new Error(`表 ${table} 在多个 schema 中存在,请指定 schema。候选:${candidates}`);
+  }
 }
 
 /** 判定是否为 MSSQL 连接级错误(值得重连重试) */
@@ -402,10 +437,10 @@ function quoteMssqlQualifiedIdent(schema: string, table: string): string {
   return `${quoteMssqlIdent(schema)}.${quoteMssqlIdent(table)}`;
 }
 
-/** 归一化 schema 名称,空值使用适配器默认 schema。 */
-function normalizeSchema(value: string | undefined, defaultSchema: string): string {
+/** 归一化 schema 名称,空值表示不限定 schema。 */
+function normalizeSchema(value: string | undefined): string | null {
   const trimmed = value?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed : defaultSchema;
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /** 采样行数夹紧到 [0, 20] */

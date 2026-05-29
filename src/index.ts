@@ -100,8 +100,8 @@ function createAdapterFromConfig(config: DbConfig) {
 
 /** 格式化 PostgreSQL/MSSQL schema 信息用于启动日志。 */
 function formatSchemaInfo(config: DbConfig): string {
-  const defaultSchema = config.type === "postgresql" ? "public" : config.type === "mssql" ? "dbo" : "";
-  return defaultSchema ? ` schema=${config.schema || defaultSchema}` : "";
+  const supportsSchema = config.type === "postgresql" || config.type === "mssql";
+  return supportsSchema ? ` schema=${config.schema || "all"}` : "";
 }
 
 main().catch((error) => {
