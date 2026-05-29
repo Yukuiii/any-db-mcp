@@ -61,6 +61,11 @@ Target Database
 ### 适配器模式 (`adapters/`)
 
 ```typescript
+interface TableInfo {
+  name: string;
+  comment: string | null;
+}
+
 interface DatabaseAdapter {
   readonly type: DatabaseType;
   connect(): Promise<void>;
@@ -70,7 +75,7 @@ interface DatabaseAdapter {
   explain(sql: string): Promise<Record<string, unknown>[]>;
   execute(sql: string): Promise<ExecuteResult>;
   transaction(sqls: string[]): Promise<TransactionResult>;
-  listTables(): Promise<string[]>;
+  listTables(): Promise<TableInfo[]>;
   describeTable(table: string): Promise<TableDescription>;
   sampleData(table: string, limit: number): Promise<Record<string, unknown>[]>;
   estimateRowCount(table: string): Promise<TableRowCount>;
@@ -120,7 +125,7 @@ interface DatabaseAdapter {
 
 暴露两个资源端点，与 Tools 互补：
 
-- `db://tables` — 当前库所有表名 + 估算行数
+- `db://tables` — 当前库所有表名 + 表注释 + 估算行数
 - `db://table/{name}` — 单表列定义与索引（动态模板，每表一个 URI）
 
 Resources 是"声明式订阅"，由客户端缓存复用；Tools 是"命令式调用"，适合需要最新数据时。

@@ -236,6 +236,27 @@ Every tool returns a unified JSON structure.
 }
 ```
 
+### Table-list Responses
+
+`list_tables`, `connect`, and connected `connection_status` responses all include
+`tableCount` and `tables`. `tables` is a structured table-info array, not a
+string array:
+
+```json
+{
+  "success": true,
+  "tableCount": 2,
+  "tables": [
+    { "name": "users", "comment": "Application users" },
+    { "name": "orders", "comment": null }
+  ],
+  "elapsedMs": 4
+}
+```
+
+`comment` comes from the database's native table comment metadata; databases
+without table comments, such as SQLite, return `null`.
+
 ## search_schema Quick Lookup
 
 `search_schema` searches table names, column names, and column types by keyword. It is useful for locating relevant schema in large databases before calling `describe_table`. Responses return at most the first 50 matches and include `failedTables` when individual table descriptions could not be read.
@@ -255,8 +276,8 @@ Every tool returns a unified JSON structure.
   "success": true,
   "table": "users",
   "columns": [
-    { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null },
-    { "name": "email", "type": "varchar(120)", "nullable": false, "key": "UNI", "extra": "", "defaultValue": null }
+    { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null, "comment": "User ID" },
+    { "name": "email", "type": "varchar(120)", "nullable": false, "key": "UNI", "extra": "", "defaultValue": null, "comment": "Email address" }
   ],
   "indexes": [
     { "name": "PRIMARY", "columns": ["id"], "unique": true },
@@ -297,6 +318,30 @@ Successful `connect` / `disconnect` calls emit
 `notifications/resources/list_changed`; subscribing clients refresh
 automatically. Reading `db://tables` while disconnected returns a friendly
 `connected: false`; reading a non-existent table returns an `error` field.
+
+Example `db://tables` response:
+
+```json
+{
+  "connected": true,
+  "databaseType": "mysql",
+  "tableCount": 2,
+  "tables": [
+    {
+      "table": "users",
+      "comment": "Application users",
+      "rowCount": 12453,
+      "rowCountIsEstimate": true
+    },
+    {
+      "table": "orders",
+      "comment": null,
+      "rowCount": 98210,
+      "rowCountIsEstimate": true
+    }
+  ]
+}
+```
 
 > **Resources vs. `list_tables` / `describe_table`**: Resources are
 > declarative — clients cache them and reuse across turns, ideal for

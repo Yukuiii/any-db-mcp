@@ -16,7 +16,7 @@ interface DatabaseAdapter {
   explain(sql: string): Promise<Record<string, unknown>[]>;
   execute(sql: string): Promise<ExecuteResult>;
   transaction(sqls: string[]): Promise<TransactionResult>;
-  listTables(): Promise<string[]>;
+  listTables(): Promise<TableInfo[]>;
   describeTable(table: string): Promise<TableDescription>;
   sampleData(table: string, limit: number): Promise<Record<string, unknown>[]>;
   estimateRowCount(table: string): Promise<TableRowCount>;
@@ -31,6 +31,11 @@ type DatabaseType = "mysql" | "postgresql" | "sqlite" | "mssql"; // 扩展这里
 interface TableColumn {
   name: string; type: string; nullable: boolean;
   defaultValue: string | null; key: string; extra: string;
+  comment: string | null;
+}
+
+interface TableInfo {
+  name: string; comment: string | null;
 }
 
 interface TableIndex {
@@ -126,7 +131,7 @@ export class OracleAdapter implements DatabaseAdapter {
     // BEGIN ... SAVEPOINT ... COMMIT / ROLLBACK
   }
 
-  async listTables(): Promise<string[]> {
+  async listTables(): Promise<TableInfo[]> {
     // SELECT table_name FROM user_tables
   }
 

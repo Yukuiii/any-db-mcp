@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] — 2026-05-29
+
+### Breaking Changes
+
+- **Structured table discovery responses**: `list_tables`, `connect`, and connected `connection_status` responses now return `tables` as `{ name, comment }[]` instead of `string[]`.
+
+### Added
+
+- **Table comments in table discovery**: `tables[].comment` exposes native table comments when available.
+- **Schema comment metadata**: `describe_table` column entries now include `comment`, sourced from MySQL column comments, PostgreSQL `col_description`, and MSSQL `MS_Description`.
+- **`db://tables` comments**: the table-list resource now includes each table's `comment` alongside row-count metadata.
+
+### Fixed
+
+- **PostgreSQL partitioned tables**: `listTables()` now includes partitioned table parents (`relkind = 'p'`) instead of only ordinary tables.
+
 ## [1.2.1] — 2026-05-29
 
 ### Added
@@ -51,7 +67,8 @@ All notable changes to this project will be documented in this file.
 - **Unified structured responses**: All tools return consistent JSON with `elapsedMs` for latency visibility.
 - **Zero-deployment**: Single-line `npx` invocation in any MCP client.
 
-[unreleased]: https://github.com/Yukuiii/any-db-mcp/compare/v1.2.1...HEAD
+[unreleased]: https://github.com/Yukuiii/any-db-mcp/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/Yukuiii/any-db-mcp/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/Yukuiii/any-db-mcp/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Yukuiii/any-db-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Yukuiii/any-db-mcp/compare/v1.0.0...v1.1.0

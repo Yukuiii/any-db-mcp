@@ -236,6 +236,25 @@ npx @sakura0v0/any-db-mcp
 }
 ```
 
+### 表信息列表响应
+
+`list_tables`、`connect` 和已连接状态下的 `connection_status` 都会返回 `tableCount` 与
+`tables`。`tables` 是结构化表信息数组，不是字符串数组：
+
+```json
+{
+  "success": true,
+  "tableCount": 2,
+  "tables": [
+    { "name": "users", "comment": "系统用户" },
+    { "name": "orders", "comment": null }
+  ],
+  "elapsedMs": 4
+}
+```
+
+`comment` 来自数据库原生表注释；无注释或 SQLite 这类无原生表注释的数据库返回 `null`。
+
 ## search_schema 快速定位
 
 `search_schema` 可按关键词搜索当前库的表名、列名和字段类型，适合大库中先定位相关表字段再调用 `describe_table`。响应最多返回前 50 个命中项，并带 `failedTables` 说明个别表结构读取失败的情况。
@@ -255,8 +274,8 @@ npx @sakura0v0/any-db-mcp
   "success": true,
   "table": "users",
   "columns": [
-    { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null },
-    { "name": "email", "type": "varchar(120)", "nullable": false, "key": "UNI", "extra": "", "defaultValue": null }
+    { "name": "id", "type": "bigint", "nullable": false, "key": "PRI", "extra": "auto_increment", "defaultValue": null, "comment": "用户 ID" },
+    { "name": "email", "type": "varchar(120)", "nullable": false, "key": "UNI", "extra": "", "defaultValue": null, "comment": "邮箱地址" }
   ],
   "indexes": [
     { "name": "PRIMARY", "columns": ["id"], "unique": true },
@@ -295,6 +314,30 @@ npx @sakura0v0/any-db-mcp
 `connect` / `disconnect` 成功后会发送 `notifications/resources/list_changed`,
 支持订阅的客户端会自动刷新可用资源列表。未连接时读 `db://tables` 返回 `connected: false`
 的友好提示,读不存在的表返回 `error` 字段。
+
+`db://tables` 返回示例：
+
+```json
+{
+  "connected": true,
+  "databaseType": "mysql",
+  "tableCount": 2,
+  "tables": [
+    {
+      "table": "users",
+      "comment": "系统用户",
+      "rowCount": 12453,
+      "rowCountIsEstimate": true
+    },
+    {
+      "table": "orders",
+      "comment": null,
+      "rowCount": 98210,
+      "rowCountIsEstimate": true
+    }
+  ]
+}
+```
 
 > 与 `list_tables` / `describe_table` 工具的区别:Resources 是"声明式订阅",由客户端缓存并复用,
 > 适合放进每次对话的上下文;Tools 是"命令式调用",适合需要最新数据(如刚做完写入)或需要采样数据时。

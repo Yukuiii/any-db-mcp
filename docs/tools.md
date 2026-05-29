@@ -4,7 +4,7 @@
 
 ### connect
 
-动态连接数据库。连接成功自动断开旧连接，返回表名列表和当前权限模式。
+动态连接数据库。连接成功自动断开旧连接，返回表信息列表和当前权限模式。
 
 | 参数 | 类型 | 必需 | 说明 |
 |------|------|:---:|------|
@@ -19,6 +19,7 @@
 | trustServerCertificate | boolean | 否 | MSSQL 信任自签证书，默认 false |
 
 成功响应包含：`message`、`type`、`connection`、`permissionMode`、`tableCount`、`tables`。
+`tables` 为 `{ name: string, comment: string | null }[]`。
 
 ### disconnect
 
@@ -26,7 +27,7 @@
 
 ### connection_status
 
-查看当前连接状态。无参数。已连接时同时返回当前库表名列表，适合通过环境变量预连接后快速了解 schema 入口。
+查看当前连接状态。无参数。已连接时同时返回当前库表信息列表，适合通过环境变量预连接后快速了解 schema 入口。
 
 返回：`connected`、`type`（数据库类型）、`healthy`、`pingMs`（耗时）、`pingError`、`permissionMode`、`tableCount`、`tables`。
 
@@ -44,9 +45,10 @@
 
 ### list_tables
 
-列出当前库所有表名。无参数。
+列出当前库所有表名和表注释。无参数。
 
 返回：`tableCount`、`tables`、`elapsedMs`。
+`tables` 为 `{ name: string, comment: string | null }[]`。
 
 ### describe_table
 
