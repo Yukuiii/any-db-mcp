@@ -23,7 +23,7 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
     "connect",
     {
       description:
-        "连接到数据库。支持 MySQL、PostgreSQL、SQLite、MSSQL 四种类型。传入连接参数后会建立新连接,之前的连接会被自动关闭。SQLite 只需要传 filepath 参数;MSSQL 在 SQL Server 2019+ 默认要求加密,自签证书环境需将 trustServerCertificate 设为 true。连接成功后返回当前数据库的表名列表与当前权限模式(权限模式仅由 server 启动配置决定,无法通过此工具修改)。",
+        "连接到数据库。支持 MySQL、PostgreSQL、SQLite、MSSQL 四种类型。传入连接参数后会建立新连接,之前的连接会被自动关闭。SQLite 只需要传 filepath 参数;MSSQL 在 SQL Server 2019+ 默认要求加密,自签证书环境需将 trustServerCertificate 设为 true。连接成功后返回当前数据库的表信息列表与当前权限模式(权限模式仅由 server 启动配置决定,无法通过此工具修改)。",
       inputSchema: {
         type: z.enum(["mysql", "postgresql", "sqlite", "mssql"]).describe("数据库类型"),
         host: z.string().default("localhost").describe("数据库主机地址(SQLite 不需要)"),
@@ -68,7 +68,7 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
           connection,
           permissionMode: config.permissionMode,
           ...tablesPayload,
-          hint: "调用 describe_table 工具并传入表名可查看该表的列定义、索引、行数与采样数据;调用 list_tables 可重新拉取表名列表。权限模式由 server 启动配置决定,重连不会改变。",
+          hint: "调用 describe_table 工具并传入表名可查看该表的列定义、索引、行数与采样数据;调用 list_tables 可重新拉取表信息列表。权限模式由 server 启动配置决定,重连不会改变。",
         });
       } catch (error) {
         return fail(`连接失败: ${errorMessage(error)}`);

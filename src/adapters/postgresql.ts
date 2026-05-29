@@ -136,12 +136,12 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      // 用 pg_class 取 oid 以便 obj_description 拿表注释;relkind='r' 仅普通表,与原 BASE TABLE 一致
+      // 用 pg_class 取 oid 以便 obj_description 拿表注释;普通表和分区表父表都属于 BASE TABLE 语义
       const sql = `
         SELECT c.relname AS name, obj_description(c.oid, 'pg_class') AS comment
         FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public' AND c.relkind = 'r'
+        WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
         ORDER BY c.relname
       `;
       const result = await this.pool!.query(sql);

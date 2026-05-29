@@ -73,7 +73,7 @@ afterEach(async () => {
 });
 
 describe("connection_status tool", () => {
-  test("已连接时返回连接状态和表名列表", async () => {
+  test("已连接时返回连接状态和表信息列表", async () => {
     await db.connectWith(createStatusAdapter());
     const handler = createRegisteredConnectionStatusHandler({ permissionMode: "readwrite" });
 
@@ -93,7 +93,7 @@ describe("connection_status tool", () => {
     ]);
   });
 
-  test("表名列表获取失败不影响连接状态返回", async () => {
+  test("表信息列表获取失败不影响连接状态返回", async () => {
     await db.connectWith(createStatusAdapter({ listTablesFails: true }));
     const handler = createRegisteredConnectionStatusHandler();
 
@@ -105,7 +105,7 @@ describe("connection_status tool", () => {
     assert.equal(body.healthy, true);
     assert.equal(body.tableCount, 0);
     assert.deepEqual(body.tables, []);
-    assert.match(body.warning, /表名列表获取失败/);
+    assert.match(body.warning, /表信息列表获取失败/);
   });
 
   test("未连接时保持原有未连接响应", async () => {

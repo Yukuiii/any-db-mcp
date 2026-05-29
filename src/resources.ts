@@ -24,7 +24,7 @@ export function registerResources(server: McpServer): void {
     {
       title: "数据库表清单",
       description:
-        "当前连接数据库的所有表名与估算行数。Schema 浏览的入口,LLM 可一次拿到所有表的规模量级,辅助决策是否进一步 describe。",
+        "当前连接数据库的所有表名、表注释与估算行数。Schema 浏览的入口,LLM 可一次拿到所有表的规模量级,辅助决策是否进一步 describe。",
       mimeType: "application/json",
     },
     async (uri) => {

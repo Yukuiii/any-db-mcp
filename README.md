@@ -23,13 +23,13 @@
 
 | Tool | 说明 | 受权限模式约束 |
 |------|------|----------------|
-| `connect` | 动态连接数据库，返回当前数据库的表名列表与权限模式 | 否 |
+| `connect` | 动态连接数据库，返回当前数据库的表信息列表与权限模式 | 否 |
 | `disconnect` | 主动断开连接并释放连接池（幂等） | 否 |
-| `connection_status` | 查看当前连接状态、ping 健康度、表名列表与权限模式 | 否 |
+| `connection_status` | 查看当前连接状态、ping 健康度、表信息列表与权限模式 | 否 |
 | `query` | 执行只读查询（`SELECT` / `SHOW` / `DESCRIBE`），响应最多返回前 1000 行 | 否 |
 | `execute` | 执行单条写操作（DML，或 `full` 模式下 DDL） | ✓ |
 | `transaction` | 在事务中顺序执行多条 SQL，任一失败回滚 | ✓ |
-| `list_tables` | 列出当前连接数据库的所有表名 | 否 |
+| `list_tables` | 列出当前连接数据库的所有表名与表注释 | 否 |
 | `describe_table` | 一次返回指定表的列定义、索引、估算行数与数据采样 | 否 |
 | `search_schema` | 按关键词搜索表名、列名和字段类型 | 否 |
 | `explain` | 获取 SQL 执行计划（不实际执行原 SQL），辅助优化 | 否 |
@@ -289,7 +289,7 @@ npx @sakura0v0/any-db-mcp
 
 | URI | 类型 | 说明 |
 |-----|------|------|
-| `db://tables` | 静态 | 当前库的所有表名 + 估算行数,JSON 格式,适合 LLM 一次摸清规模量级 |
+| `db://tables` | 静态 | 当前库的所有表名 + 表注释 + 估算行数,JSON 格式,适合 LLM 一次摸清规模量级 |
 | `db://table/{name}` | 动态模板 | 单表的列定义与索引,每张表自动一个 URI(由 server 根据当前库动态生成) |
 
 `connect` / `disconnect` 成功后会发送 `notifications/resources/list_changed`,

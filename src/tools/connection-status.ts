@@ -10,7 +10,7 @@ export function registerConnectionStatusTool(server: McpServer, config: AppConfi
     "connection_status",
     {
       description:
-        "查看当前数据库连接的状态，返回是否已连接、数据库类型、ping 健康度（实测耗时）、表名列表以及权限模式。LLM 在长时间未操作后或捕获到执行失败时可调用此工具确认连接可用性。",
+        "查看当前数据库连接的状态，返回是否已连接、数据库类型、ping 健康度（实测耗时）、表信息列表以及权限模式。LLM 在长时间未操作后或捕获到执行失败时可调用此工具确认连接可用性。",
     },
     async () => {
       try {

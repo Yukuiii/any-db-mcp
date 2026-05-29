@@ -23,13 +23,13 @@ English | [简体中文](./README.md)
 
 | Tool | Description | Subject to permission mode |
 |------|-------------|----------------------------|
-| `connect` | Connect to a database; returns table list and current permission mode | No |
+| `connect` | Connect to a database; returns table names/comments and current permission mode | No |
 | `disconnect` | Close current connection and release the pool (idempotent) | No |
-| `connection_status` | Show connection state, ping health, table names, and permission mode | No |
+| `connection_status` | Show connection state, ping health, table names/comments, and permission mode | No |
 | `query` | Run read-only queries (`SELECT` / `SHOW` / `DESCRIBE`), returning at most the first 1000 rows | No |
 | `execute` | Run a single write statement (DML, or DDL in `full` mode) | Yes |
 | `transaction` | Run multiple SQLs in a transaction; any failure triggers rollback | Yes |
-| `list_tables` | List all table names in the current connected database | No |
+| `list_tables` | List all table names and comments in the current connected database | No |
 | `describe_table` | Returns columns, indexes, estimated row count, and sample rows in one call | No |
 | `search_schema` | Search table names, column names, and column types by keyword | No |
 | `explain` | Get a SQL execution plan (does not run the original SQL) | No |
@@ -290,7 +290,7 @@ firing on connect/disconnect):
 
 | URI | Kind | Description |
 |-----|------|-------------|
-| `db://tables` | Static | All table names + estimated row counts as JSON; lets the LLM size up the database in one read |
+| `db://tables` | Static | All table names + comments + estimated row counts as JSON; lets the LLM size up the database in one read |
 | `db://table/{name}` | Dynamic template | Column and index definitions per table; one URI per table, generated from the live connection |
 
 Successful `connect` / `disconnect` calls emit
