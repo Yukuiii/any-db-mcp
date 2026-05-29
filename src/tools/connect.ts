@@ -8,6 +8,7 @@ import { MSSQLAdapter } from "../adapters/mssql.js";
 import type { DatabaseType } from "../adapters/types.js";
 import type { AppConfig } from "../config.js";
 import { ok, fail, errorMessage } from "../utils/response.js";
+import { safeListTablesPayload } from "./shared/table-list-payload.js";
 
 /**
  * SECURITY: 严禁在此工具的 inputSchema 中加入任何与权限模式相关的字段
@@ -56,7 +57,7 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
         await db.connectWith(adapter);
 
         const connection = formatConnectionInfo(type, { host, port, database, filepath });
-        const tablesPayload = await safeListTables();
+        const tablesPayload = await safeListTablesPayload();
 
         // 通知客户端 db://table/{name} 资源列表已变化(原库的表名不再适用)
         notifyResourceListChanged(server);
@@ -161,18 +162,4 @@ function formatConnectionInfo(
   const label = type === "mysql" ? "MySQL" : type === "postgresql" ? "PostgreSQL" : "MSSQL";
   const dbInfo = params.database ? `/${params.database}` : "";
   return `${label} ${params.host}:${resolvedPort}${dbInfo}`;
-}
-
-/** 拉取当前库的表名列表（失败时返回 warning 字段，不抛错） */
-async function safeListTables(): Promise<Record<string, unknown>> {
-  try {
-    const tables = await db.listTables();
-    return { tableCount: tables.length, tables };
-  } catch (error) {
-    return {
-      tableCount: 0,
-      tables: [],
-      warning: `表名列表获取失败（不影响连接）: ${errorMessage(error)}`,
-    };
-  }
 }

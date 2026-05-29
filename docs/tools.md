@@ -26,9 +26,9 @@
 
 ### connection_status
 
-查看当前连接状态。无参数。
+查看当前连接状态。无参数。已连接时同时返回当前库表名列表，适合通过环境变量预连接后快速了解 schema 入口。
 
-返回：`connected`、`type`（数据库类型）、`pingMs`（耗时）、`permissionMode`。
+返回：`connected`、`type`（数据库类型）、`healthy`、`pingMs`（耗时）、`pingError`、`permissionMode`、`tableCount`、`tables`。
 
 ### query
 
