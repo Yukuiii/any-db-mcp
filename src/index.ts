@@ -20,9 +20,10 @@ async function main(): Promise<void> {
     try {
       const adapter = createAdapterFromConfig(config.db);
       await db.connectWith(adapter);
-      const label = config.db.type === "sqlite"
-        ? `SQLite (${config.db.filepath})`
-        : `${config.db.type} ${config.db.host}:${config.db.port}`;
+      const label =
+        config.db.type === "sqlite"
+          ? `SQLite (${config.db.filepath})`
+          : `${config.db.type} ${config.db.host}:${config.db.port}${formatSchemaInfo(config.db)}`;
       console.error(`[any-db-mcp] 已通过环境变量连接到 ${label}`);
 
       try {
@@ -77,6 +78,7 @@ function createAdapterFromConfig(config: DbConfig) {
         user: config.user,
         password: config.password,
         database: config.database,
+        schema: config.schema,
       });
     case "sqlite":
       return new SQLiteAdapter({ filepath: config.filepath });
@@ -87,12 +89,19 @@ function createAdapterFromConfig(config: DbConfig) {
         user: config.user,
         password: config.password,
         database: config.database,
+        schema: config.schema,
         encrypt: config.encrypt,
         trustServerCertificate: config.trustServerCertificate,
       });
     default:
       throw new Error(`不支持的数据库类型: ${config.type}`);
   }
+}
+
+/** 格式化 PostgreSQL/MSSQL schema 信息用于启动日志。 */
+function formatSchemaInfo(config: DbConfig): string {
+  const defaultSchema = config.type === "postgresql" ? "public" : config.type === "mssql" ? "dbo" : "";
+  return defaultSchema ? ` schema=${config.schema || defaultSchema}` : "";
 }
 
 main().catch((error) => {

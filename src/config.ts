@@ -36,6 +36,8 @@ export interface DbConfig {
   readonly user: string;
   readonly password: string;
   readonly database: string;
+  /** PostgreSQL/MSSQL 专属:schema 名称,空值由适配器使用默认 schema */
+  readonly schema: string;
   /** SQLite 文件路径 */
   readonly filepath: string;
   /** MSSQL 专属:是否启用 TLS 加密(SQL Server 2019+ 默认要求) */
@@ -81,6 +83,7 @@ export function loadConfig(): AppConfig {
           user: process.env.DB_USER || "root",
           password: process.env.DB_PASSWORD || "",
           database: process.env.DB_NAME || "",
+          schema: process.env.DB_SCHEMA || "",
           filepath: process.env.DB_FILEPATH || "",
           encrypt: parseBool(process.env.DB_ENCRYPT, true),
           trustServerCertificate: parseBool(process.env.DB_TRUST_SERVER_CERTIFICATE, false),

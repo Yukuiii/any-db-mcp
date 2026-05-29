@@ -19,6 +19,8 @@ export interface MSSQLConfig {
   user: string;
   password: string;
   database: string;
+  /** 默认 dbo,用于限定 list/describe/sample/rowCount 的 schema */
+  schema?: string;
   /** TLS 加密(SQL Server 2019+ 默认要求),默认 true */
   encrypt: boolean;
   /** 信任自签证书(开发/局域网常用),默认 false */
@@ -30,9 +32,11 @@ export class MSSQLAdapter implements DatabaseAdapter {
   readonly type = "mssql" as const;
   private pool: sql.ConnectionPool | null = null;
   private config: MSSQLConfig;
+  private schema: string;
 
   constructor(config: MSSQLConfig) {
     this.config = config;
+    this.schema = normalizeSchema(config.schema, "dbo");
   }
 
   /** 创建连接池并验证可用性 */
@@ -154,17 +158,21 @@ export class MSSQLAdapter implements DatabaseAdapter {
     return { committed: true, steps, failedAt: null, error: null };
   }
 
-  /** 列出当前数据库的所有用户表(默认 dbo schema,含表注释) */
+  /** 列出当前数据库指定 schema 下的所有用户表(含表注释) */
   async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
       // LEFT JOIN extended_properties 取表级 MS_Description(minor_id=0);value 为 sql_variant,CAST 成文本
-      const r = await this.pool!.request().query(`
+      const r = await this.pool!
+        .request()
+        .input("schema", sql.NVarChar, this.schema)
+        .query(`
         SELECT t.name AS name, CAST(ep.value AS NVARCHAR(MAX)) AS comment
         FROM sys.tables t
+        INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
         LEFT JOIN sys.extended_properties ep
           ON ep.major_id = t.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
-        WHERE t.schema_id = SCHEMA_ID('dbo')
+        WHERE s.name = @schema
         ORDER BY t.name
       `);
       return (r.recordset ?? []).map((row: { name: string; comment: string | null }) => ({
@@ -178,11 +186,12 @@ export class MSSQLAdapter implements DatabaseAdapter {
   async describeTable(table: string): Promise<TableDescription> {
     return this.withRetry(async () => {
       this.ensureConnected();
+      const objectName = quoteMssqlQualifiedIdent(this.schema, table);
 
       // 列信息(用参数化避免注入);LEFT JOIN extended_properties 取列级 MS_Description
       const colRes = await this.pool!
         .request()
-        .input("table", sql.NVarChar, table)
+        .input("objectName", sql.NVarChar, objectName)
         .query(`
           SELECT
             c.name AS column_name,
@@ -197,7 +206,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
           LEFT JOIN sys.extended_properties ep
             ON ep.major_id = c.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
-          WHERE c.object_id = OBJECT_ID(@table)
+          WHERE c.object_id = OBJECT_ID(@objectName)
           ORDER BY c.column_id
         `);
       const columns: TableColumn[] = (colRes.recordset ?? []).map(
@@ -223,7 +232,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
       // 索引信息
       const idxRes = await this.pool!
         .request()
-        .input("table", sql.NVarChar, table)
+        .input("objectName", sql.NVarChar, objectName)
         .query(`
           SELECT
             i.name AS index_name,
@@ -234,7 +243,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           FROM sys.indexes i
           INNER JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
           INNER JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-          WHERE i.object_id = OBJECT_ID(@table) AND i.name IS NOT NULL
+          WHERE i.object_id = OBJECT_ID(@objectName) AND i.name IS NOT NULL
           ORDER BY i.name, ic.key_ordinal
         `);
       const indexMap = new Map<string, TableIndex>();
@@ -263,7 +272,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
       // 外键信息
       const fkRes = await this.pool!
         .request()
-        .input("table", sql.NVarChar, table)
+        .input("objectName", sql.NVarChar, objectName)
         .query(`
           SELECT
             fk.name AS constraint_name,
@@ -275,7 +284,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           JOIN sys.columns c1 ON c1.object_id = fkc.parent_object_id AND c1.column_id = fkc.parent_column_id
           JOIN sys.columns c2 ON c2.object_id = fkc.referenced_object_id AND c2.column_id = fkc.referenced_column_id
           JOIN sys.tables t2 ON t2.object_id = fkc.referenced_object_id
-          WHERE fk.parent_object_id = OBJECT_ID(@table)
+          WHERE fk.parent_object_id = OBJECT_ID(@objectName)
           ORDER BY fk.name
         `);
       const foreignKeys: ForeignKey[] = (fkRes.recordset ?? []).map(
@@ -295,7 +304,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
   async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const ident = quoteMssqlIdent(table);
+      const ident = quoteMssqlQualifiedIdent(this.schema, table);
       const safeLimit = clampLimit(limit);
       const r = await this.pool!.request().query(`SELECT TOP ${safeLimit} * FROM ${ident}`);
       return (r.recordset ?? []) as Record<string, unknown>[];
@@ -308,11 +317,11 @@ export class MSSQLAdapter implements DatabaseAdapter {
       this.ensureConnected();
       const r = await this.pool!
         .request()
-        .input("table", sql.NVarChar, table)
+        .input("objectName", sql.NVarChar, quoteMssqlQualifiedIdent(this.schema, table))
         .query(`
           SELECT SUM(p.rows) AS rows
           FROM sys.partitions p
-          WHERE p.object_id = OBJECT_ID(@table) AND p.index_id IN (0, 1)
+          WHERE p.object_id = OBJECT_ID(@objectName) AND p.index_id IN (0, 1)
         `);
       const raw = r.recordset?.[0]?.rows;
       if (raw == null) return { value: null, isEstimate: true };
@@ -386,6 +395,17 @@ function isMssqlConnectionLost(err: unknown): boolean {
 /** MSSQL 标识符 quote:中括号包裹,内部右中括号双写 */
 function quoteMssqlIdent(name: string): string {
   return "[" + name.replace(/]/g, "]]") + "]";
+}
+
+/** MSSQL 二段式对象名 quote:schema 与 table 分别中括号包裹。 */
+function quoteMssqlQualifiedIdent(schema: string, table: string): string {
+  return `${quoteMssqlIdent(schema)}.${quoteMssqlIdent(table)}`;
+}
+
+/** 归一化 schema 名称,空值使用适配器默认 schema。 */
+function normalizeSchema(value: string | undefined, defaultSchema: string): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : defaultSchema;
 }
 
 /** 采样行数夹紧到 [0, 20] */

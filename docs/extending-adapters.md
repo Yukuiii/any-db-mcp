@@ -94,7 +94,7 @@ import type { DatabaseAdapter, DatabaseType, ExecuteResult, TableDescription,
   TableRowCount, TransactionResult } from "./types.js";
 
 interface OracleConfig {
-  host: string; port: number; user: string; password: string; database: string;
+  host: string; port: number; user: string; password: string; database: string; schema?: string;
 }
 
 export class OracleAdapter implements DatabaseAdapter {
@@ -159,6 +159,7 @@ case "oracle":
     host: params.host, port: resolvedPort,
     user: params.user, password: params.password,
     database: params.database,
+    schema: params.schema,
   });
 ```
 

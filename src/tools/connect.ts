@@ -23,7 +23,7 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
     "connect",
     {
       description:
-        "连接到数据库。支持 MySQL、PostgreSQL、SQLite、MSSQL 四种类型。传入连接参数后会建立新连接,之前的连接会被自动关闭。SQLite 只需要传 filepath 参数;MSSQL 在 SQL Server 2019+ 默认要求加密,自签证书环境需将 trustServerCertificate 设为 true。连接成功后返回当前数据库的表信息列表与当前权限模式(权限模式仅由 server 启动配置决定,无法通过此工具修改)。",
+        "连接到数据库。支持 MySQL、PostgreSQL、SQLite、MSSQL 四种类型。传入连接参数后会建立新连接,之前的连接会被自动关闭。SQLite 只需要传 filepath 参数;PostgreSQL/MSSQL 可通过 schema 指定命名空间;MSSQL 在 SQL Server 2019+ 默认要求加密,自签证书环境需将 trustServerCertificate 设为 true。连接成功后返回当前数据库的表信息列表与当前权限模式(权限模式仅由 server 启动配置决定,无法通过此工具修改)。",
       inputSchema: {
         type: z.enum(["mysql", "postgresql", "sqlite", "mssql"]).describe("数据库类型"),
         host: z.string().default("localhost").describe("数据库主机地址(SQLite 不需要)"),
@@ -31,6 +31,7 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
         user: z.string().default("").describe("数据库用户名(SQLite 不需要)"),
         password: z.string().default("").describe("数据库密码(SQLite 不需要)"),
         database: z.string().default("").describe("数据库名(SQLite 不需要)"),
+        schema: z.string().default("").describe("仅 PostgreSQL/MSSQL 使用:schema 名称,PG 默认 public,MSSQL 默认 dbo"),
         filepath: z.string().default("").describe("SQLite 数据库文件路径(仅 SQLite 使用)"),
         encrypt: z
           .boolean()
@@ -42,7 +43,7 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
           .describe("仅 MSSQL 使用:是否信任自签证书(开发/局域网常用),默认 false"),
       },
     },
-    async ({ type, host, port, user, password, database, filepath, encrypt, trustServerCertificate }) => {
+    async ({ type, host, port, user, password, database, schema, filepath, encrypt, trustServerCertificate }) => {
       try {
         const adapter = createAdapter(type, {
           host,
@@ -50,13 +51,14 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
           user,
           password,
           database,
+          schema,
           filepath,
           encrypt,
           trustServerCertificate,
         });
         await db.connectWith(adapter);
 
-        const connection = formatConnectionInfo(type, { host, port, database, filepath });
+        const connection = formatConnectionInfo(type, { host, port, database, schema, filepath });
         const tablesPayload = await safeListTablesPayload();
 
         // 通知客户端 db://table/{name} 资源列表已变化(原库的表名不再适用)
@@ -97,6 +99,12 @@ const DEFAULT_PORTS: Record<DatabaseType, number> = {
   mssql: 1433,
 };
 
+/** PostgreSQL/MSSQL 默认 schema。 */
+const DEFAULT_SCHEMAS: Partial<Record<DatabaseType, string>> = {
+  postgresql: "public",
+  mssql: "dbo",
+};
+
 /** 根据类型创建对应数据库适配器 */
 function createAdapter(
   type: DatabaseType,
@@ -106,6 +114,7 @@ function createAdapter(
     user: string;
     password: string;
     database: string;
+    schema: string;
     filepath: string;
     encrypt: boolean;
     trustServerCertificate: boolean;
@@ -129,6 +138,7 @@ function createAdapter(
         user: params.user,
         password: params.password,
         database: params.database,
+        schema: params.schema,
       });
     case "sqlite":
       if (!params.filepath) {
@@ -142,6 +152,7 @@ function createAdapter(
         user: params.user,
         password: params.password,
         database: params.database,
+        schema: params.schema,
         encrypt: params.encrypt,
         trustServerCertificate: params.trustServerCertificate,
       });
@@ -153,7 +164,7 @@ function createAdapter(
 /** 格式化连接信息用于显示 */
 function formatConnectionInfo(
   type: DatabaseType,
-  params: { host: string; port: number; database: string; filepath: string }
+  params: { host: string; port: number; database: string; schema: string; filepath: string }
 ): string {
   if (type === "sqlite") {
     return `SQLite (${params.filepath})`;
@@ -161,5 +172,7 @@ function formatConnectionInfo(
   const resolvedPort = params.port === 0 ? DEFAULT_PORTS[type] : params.port;
   const label = type === "mysql" ? "MySQL" : type === "postgresql" ? "PostgreSQL" : "MSSQL";
   const dbInfo = params.database ? `/${params.database}` : "";
-  return `${label} ${params.host}:${resolvedPort}${dbInfo}`;
+  const defaultSchema = DEFAULT_SCHEMAS[type];
+  const schemaInfo = defaultSchema ? ` schema=${params.schema || defaultSchema}` : "";
+  return `${label} ${params.host}:${resolvedPort}${dbInfo}${schemaInfo}`;
 }

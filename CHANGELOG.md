@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Configurable PostgreSQL/MSSQL schema**: `connect.schema` and `DB_SCHEMA` now select the schema used by table listing, table description, row-count estimation, and sampling. Defaults remain `public` for PostgreSQL and `dbo` for MSSQL.
+
 ## [1.2.2] — 2026-05-29
 
 ### Breaking Changes

@@ -8,7 +8,7 @@ export function registerListTablesTool(server: McpServer): void {
     "list_tables",
     {
       description:
-        "列出当前连接数据库的所有表名与表注释。tables 字段为包含 name/comment 的结构化列表。基于 connect 工具建立的连接（MySQL 当前 database / PostgreSQL public schema / SQLite 当前文件）。如需查看其他数据库或 schema，请使用 query 工具直接执行相应 SQL。",
+        "列出当前连接数据库的所有表名与表注释。tables 字段为包含 name/comment 的结构化列表。基于 connect 工具建立的连接（MySQL 当前 database / PostgreSQL 配置 schema / MSSQL 配置 schema / SQLite 当前文件）。如需查看其他数据库或 schema，请使用 query 工具直接执行相应 SQL。",
     },
     async () => {
       const startedAt = performance.now();

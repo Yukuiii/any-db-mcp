@@ -105,6 +105,7 @@ node dist/index.js
 | `DB_USER` | 数据库用户名 | `root` |
 | `DB_PASSWORD` | 数据库密码 | （空） |
 | `DB_NAME` | 默认数据库 | （空） |
+| `DB_SCHEMA` | 仅 PostgreSQL/MSSQL:schema 名称 | PG: `public` / MSSQL: `dbo` |
 | `DB_FILEPATH` | SQLite 数据库文件路径 | （空） |
 | `DB_ENCRYPT` | 仅 MSSQL：是否启用 TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | 仅 MSSQL：是否信任自签证书 | `false` |
@@ -143,7 +144,8 @@ LLM 调用 `connect` 工具时的入参示例：
   "port": 5432,
   "user": "postgres",
   "password": "xxx",
-  "database": "mydb"
+  "database": "mydb",
+  "schema": "public"
 }
 ```
 
@@ -166,6 +168,7 @@ LLM 调用 `connect` 工具时的入参示例：
   "user": "sa",
   "password": "xxx",
   "database": "mydb",
+  "schema": "dbo",
   "encrypt": true,
   "trustServerCertificate": false
 }

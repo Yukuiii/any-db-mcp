@@ -14,6 +14,7 @@
 | user | string | 否 | 用户名（SQLite 不需要） |
 | password | string | 否 | 密码（SQLite 不需要） |
 | database | string | 否 | 数据库名（SQLite 不需要） |
+| schema | string | 否 | 仅 PostgreSQL/MSSQL:schema 名称，PG 默认 public，MSSQL 默认 dbo |
 | filepath | string | 否 | SQLite 文件路径（仅 SQLite） |
 | encrypt | boolean | 否 | MSSQL TLS 加密，默认 true |
 | trustServerCertificate | boolean | 否 | MSSQL 信任自签证书，默认 false |

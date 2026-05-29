@@ -19,6 +19,8 @@ export interface PostgreSQLConfig {
   user: string;
   password: string;
   database: string;
+  /** 默认 public,用于限定 list/describe/sample/rowCount 的 schema */
+  schema?: string;
 }
 
 /** PostgreSQL 数据库适配器 */
@@ -26,9 +28,11 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   readonly type = "postgresql" as const;
   private pool: pg.Pool | null = null;
   private config: PostgreSQLConfig;
+  private schema: string;
 
   constructor(config: PostgreSQLConfig) {
     this.config = config;
+    this.schema = normalizeSchema(config.schema, "public");
   }
 
   /** 创建连接池并验证可用性 */
@@ -132,7 +136,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
     }
   }
 
-  /** 列出当前连接库（默认 public schema）下的所有表(含表注释) */
+  /** 列出当前连接库指定 schema 下的所有表(含表注释) */
   async listTables(): Promise<TableInfo[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
@@ -141,10 +145,10 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         SELECT c.relname AS name, obj_description(c.oid, 'pg_class') AS comment
         FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+        WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
         ORDER BY c.relname
       `;
-      const result = await this.pool!.query(sql);
+      const result = await this.pool!.query(sql, [this.schema]);
       return result.rows.map((row) => ({
         name: row.name as string,
         comment: (row.comment as string | null) ?? null,
@@ -166,10 +170,10 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
                  ordinal_position
                ) AS column_comment
         FROM information_schema.columns
-        WHERE table_name = $1 AND table_schema = 'public'
+        WHERE table_name = $1 AND table_schema = $2
         ORDER BY ordinal_position
       `;
-      const colResult = await this.pool!.query(colSql, [table]);
+      const colResult = await this.pool!.query(colSql, [table, this.schema]);
       const columns: TableColumn[] = colResult.rows.map((row) => ({
         name: row.column_name as string,
         type: row.data_type as string,
@@ -189,10 +193,11 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-        WHERE t.relname = $1 AND t.relkind = 'r'
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE t.relname = $1 AND n.nspname = $2 AND t.relkind IN ('r', 'p')
         ORDER BY i.relname, a.attnum
       `;
-      const idxResult = await this.pool!.query(idxSql, [table]);
+      const idxResult = await this.pool!.query(idxSql, [table, this.schema]);
       const indexMap = new Map<string, TableIndex>();
       for (const row of idxResult.rows) {
         const name = row.index_name as string;
@@ -212,9 +217,10 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         FROM pg_index ix
         JOIN pg_class t ON t.oid = ix.indrelid
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-        WHERE t.relname = $1 AND ix.indisprimary
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE t.relname = $1 AND n.nspname = $2 AND ix.indisprimary
       `;
-      const pkResult = await this.pool!.query(pkSql, [table]);
+      const pkResult = await this.pool!.query(pkSql, [table, this.schema]);
       const pkColumns = new Set(pkResult.rows.map((r) => r.column_name as string));
       for (const col of columns) {
         if (pkColumns.has(col.name)) col.key = "PRI";
@@ -233,10 +239,10 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         JOIN information_schema.constraint_column_usage ccu
           ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_name = $1 AND tc.table_schema = 'public'
+          AND tc.table_name = $1 AND tc.table_schema = $2
         ORDER BY tc.constraint_name
       `;
-      const fkResult = await this.pool!.query(fkSql, [table]);
+      const fkResult = await this.pool!.query(fkSql, [table, this.schema]);
       const foreignKeys: ForeignKey[] = fkResult.rows.map((row) => ({
         column: row.column_name as string,
         referencedTable: row.referenced_table as string,
@@ -252,7 +258,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   async sampleData(table: string, limit: number): Promise<Record<string, unknown>[]> {
     return this.withRetry(async () => {
       this.ensureConnected();
-      const ident = quotePgIdent(table);
+      const ident = `${quotePgIdent(this.schema)}.${quotePgIdent(table)}`;
       const safeLimit = clampLimit(limit);
       const result = await this.pool!.query(`SELECT * FROM ${ident} LIMIT ${safeLimit}`);
       return result.rows;
@@ -267,9 +273,9 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         SELECT c.reltuples::bigint AS rows
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE c.relname = $1 AND n.nspname = 'public' AND c.relkind = 'r'
+        WHERE c.relname = $1 AND n.nspname = $2 AND c.relkind IN ('r', 'p')
       `;
-      const result = await this.pool!.query(sql, [table]);
+      const result = await this.pool!.query(sql, [table, this.schema]);
       if (result.rows.length === 0) {
         return { value: null, isEstimate: true };
       }
@@ -345,6 +351,12 @@ function isPgConnectionLost(err: unknown): boolean {
 /** PG 标识符 quote:双引号包裹,内部双引号双写 */
 function quotePgIdent(name: string): string {
   return '"' + name.replace(/"/g, '""') + '"';
+}
+
+/** 归一化 schema 名称,空值使用适配器默认 schema。 */
+function normalizeSchema(value: string | undefined, defaultSchema: string): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : defaultSchema;
 }
 
 /** 采样行数夹紧到 [0, 20] */

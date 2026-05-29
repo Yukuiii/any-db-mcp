@@ -105,6 +105,7 @@ Corresponding MCP client config:
 | `DB_USER` | Database user | `root` |
 | `DB_PASSWORD` | Database password | (empty) |
 | `DB_NAME` | Default database | (empty) |
+| `DB_SCHEMA` | PostgreSQL/MSSQL only: schema name | PG: `public` / MSSQL: `dbo` |
 | `DB_FILEPATH` | SQLite database file path | (empty) |
 | `DB_ENCRYPT` | MSSQL only: enable TLS encryption | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL only: trust self-signed certificate | `false` |
@@ -143,7 +144,8 @@ Example inputs the LLM passes to the `connect` tool:
   "port": 5432,
   "user": "postgres",
   "password": "xxx",
-  "database": "mydb"
+  "database": "mydb",
+  "schema": "public"
 }
 ```
 
@@ -166,6 +168,7 @@ Example inputs the LLM passes to the `connect` tool:
   "user": "sa",
   "password": "xxx",
   "database": "mydb",
+  "schema": "dbo",
   "encrypt": true,
   "trustServerCertificate": false
 }

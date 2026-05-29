@@ -11,6 +11,7 @@
 | `DB_USER` | 用户名 | `root` |
 | `DB_PASSWORD` | 密码 | 空 |
 | `DB_NAME` | 数据库名 | 空 |
+| `DB_SCHEMA` | PostgreSQL/MSSQL schema 名称 | PG: `public` / MSSQL: `dbo` |
 | `DB_FILEPATH` | SQLite 文件路径 | 空 |
 | `DB_ENCRYPT` | MSSQL TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL 信任自签证书 | `false` |
@@ -151,7 +152,8 @@ node dist/index.js
         "DB_PORT": "5432",
         "DB_USER": "postgres",
         "DB_PASSWORD": "your_password",
-        "DB_NAME": "your_database"
+        "DB_NAME": "your_database",
+        "DB_SCHEMA": "public"
       }
     }
   }
