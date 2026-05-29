@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] — 2026-05-26
+
+### Added
+
+- **`search_schema` tool**: keyword search across table names, column names, and column types to quickly locate relevant tables/fields in large schemas.
+- **`QUERY_TIMEOUT_MS` configuration**: the `query` tool now fails fast when execution exceeds the configured timeout (default 30000ms).
+- **Query result cap**: `query` responses return at most the first 1000 rows, exposing `limit` and `truncated` fields for visibility.
+- **Docker support**: multi-stage Dockerfile and docker-compose for containerized deployment.
+- **Documentation**: architecture, tools, adapter-extension, and deployment guides.
+
+### Changed
+
+- **`search_schema` performance**: tables are now described in parallel (throttled by the connection pool) instead of serially, significantly reducing latency on large databases.
+- **Server version**: now read from `package.json` at runtime instead of being hardcoded.
+- Internal restructure: tools, utilities, and resources split into distinct directories.
+
+### Fixed
+
+- Routed `EXPLAIN`-prefixed statements away from the `query` tool to the dedicated `explain` tool.
+
 ## [1.1.0] — 2026-05-25
 
 ### Added
@@ -25,6 +45,7 @@ All notable changes to this project will be documented in this file.
 - **Unified structured responses**: All tools return consistent JSON with `elapsedMs` for latency visibility.
 - **Zero-deployment**: Single-line `npx` invocation in any MCP client.
 
-[unreleased]: https://github.com/Yukuiii/any-db-mcp/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/Yukuiii/any-db-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Yukuiii/any-db-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Yukuiii/any-db-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Yukuiii/any-db-mcp/releases/tag/v1.0.0

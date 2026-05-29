@@ -1,6 +1,6 @@
 {
   "name": "@sakura0v0/any-db-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP Server for MySQL, PostgreSQL, SQLite and Microsoft SQL Server database operations",
   "type": "module",
   "main": "dist/index.js",
