@@ -35,7 +35,15 @@ export function registerResources(server: McpServer): void {
           message: "尚未连接数据库,请先调用 connect 工具",
         });
       }
-      const tables = await db.listTables();
+      let tables: TableInfo[];
+      try {
+        tables = await db.listTables();
+      } catch (err) {
+        return resourceJson(uri.href, {
+          connected: true,
+          error: `获取表清单失败: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
       // 行数与表名并行,任一失败不影响整体
       const stats = await Promise.all(
         tables.map(async ({ schema, name, comment }) => {

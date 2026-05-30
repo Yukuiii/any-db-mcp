@@ -162,11 +162,16 @@ export class OracleAdapter implements DatabaseAdapter {
           });
         } catch (err) {
           await connection.rollback().catch(() => undefined);
+          const baseError = err instanceof Error ? err.message : String(err);
+          // Oracle DDL 会隐式提交:若前序步骤含 DDL,它们已落库且无法随本次 rollback 撤销,需如实告知调用方
+          const priorDDL = steps.some((step) => isOracleDDL(step.sql));
           return {
             committed: false,
             steps,
             failedAt: i,
-            error: err instanceof Error ? err.message : String(err),
+            error: priorDDL
+              ? `${baseError}(注意:前序 DDL 语句在 Oracle 中已隐式提交,无法随本次失败回滚)`
+              : baseError,
           };
         }
       }
@@ -187,6 +192,7 @@ export class OracleAdapter implements DatabaseAdapter {
          WHERE (
            (:schema IS NULL AND ${nonSystemOwnerCondition("t.owner")})
            OR t.owner = :schema
+           OR t.owner = UPPER(:schema)
          )
          ORDER BY t.owner, t.table_name`,
         { schema: this.schema }
@@ -307,8 +313,7 @@ export class OracleAdapter implements DatabaseAdapter {
       );
       const foreignKeys: ForeignKey[] = fkRows.map((row) => ({
         column: row.column,
-        referencedTable:
-          row.referencedSchema === target.schema ? row.referencedTable : `${row.referencedSchema}.${row.referencedTable}`,
+        referencedTable: `${row.referencedSchema}.${row.referencedTable}`,
         referencedColumn: row.referencedColumn,
         constraintName: row.constraintName,
       }));
@@ -422,7 +427,7 @@ export class OracleAdapter implements DatabaseAdapter {
        FROM all_tables
        WHERE (table_name = :table OR table_name = UPPER(:table))
          AND (
-           (:schema IS NOT NULL AND owner = :schema)
+           (:schema IS NOT NULL AND (owner = :schema OR owner = UPPER(:schema)))
            OR (:schema IS NULL AND ${nonSystemOwnerCondition("owner")})
          )
        ORDER BY CASE WHEN table_name = :table THEN 0 ELSE 1 END, owner`,
@@ -471,6 +476,11 @@ function isOracleConnectionLost(err: unknown): boolean {
   );
 }
 
+/** 粗判是否为 Oracle DDL 语句(会触发隐式提交,无法回滚)。 */
+function isOracleDDL(sql: string): boolean {
+  return /^\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|COMMENT|FLASHBACK|PURGE|ANALYZE|AUDIT)\b/i.test(sql);
+}
+
 /** 构造 Oracle Thin connect string。 */
 function buildConnectString(config: OracleConfig): string {
   const database = config.database.trim();
@@ -498,10 +508,10 @@ function quoteOracleQualifiedIdent(target: OracleTableTarget): string {
   return `${quoteOracleIdent(target.schema)}.${quoteOracleIdent(target.table)}`;
 }
 
-/** 归一化 Oracle schema 名称,空值表示不限定 schema。 */
+/** 归一化 Oracle schema/对象名称,空值表示不限定;保留原大小写以兼容带引号创建的小写/混合大小写对象。 */
 function normalizeOracleName(value: string | undefined): string | null {
   const trimmed = value?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed.toUpperCase() : null;
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /** Oracle 无注释时返回空串,统一归一化为 null。 */
@@ -528,8 +538,14 @@ function formatOracleType(row: {
   if (["CHAR", "NCHAR", "VARCHAR2", "NVARCHAR2"].includes(type)) {
     return `${type}(${row.charLength ?? row.dataLength ?? ""})`;
   }
-  if (type === "NUMBER" && row.precision != null) {
-    return row.scale != null && row.scale > 0 ? `${type}(${row.precision},${row.scale})` : `${type}(${row.precision})`;
+  if (type === "NUMBER") {
+    if (row.precision != null) {
+      return row.scale != null && row.scale > 0 ? `${type}(${row.precision},${row.scale})` : `${type}(${row.precision})`;
+    }
+    // NUMBER(*,s):精度取最大值时 data_precision 为 null,但仍有 scale 需保留
+    if (row.scale != null && row.scale > 0) {
+      return `${type}(*,${row.scale})`;
+    }
   }
   if (type.startsWith("TIMESTAMP") && !type.includes("(") && row.scale != null) {
     return `${type}(${row.scale})`;

@@ -237,7 +237,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
         })
       );
 
-      // 索引信息
+      // 索引信息(仅键列:INCLUDE 的非键列 key_ordinal=0,纳入会污染键序)
       const idxRes = await this.pool!
         .request()
         .input("objectName", sql.NVarChar, objectName)
@@ -251,7 +251,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           FROM sys.indexes i
           INNER JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
           INNER JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-          WHERE i.object_id = OBJECT_ID(@objectName) AND i.name IS NOT NULL
+          WHERE i.object_id = OBJECT_ID(@objectName) AND i.name IS NOT NULL AND ic.is_included_column = 0
           ORDER BY i.name, ic.key_ordinal
         `);
       const indexMap = new Map<string, TableIndex>();
@@ -277,7 +277,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
         if (pkColumns.has(col.name)) col.key = "PRI";
       }
 
-      // 外键信息
+      // 外键信息;referenced_table 带 schema 限定,避免跨 schema 同名父表歧义
       const fkRes = await this.pool!
         .request()
         .input("objectName", sql.NVarChar, objectName)
@@ -285,6 +285,7 @@ export class MSSQLAdapter implements DatabaseAdapter {
           SELECT
             fk.name AS constraint_name,
             c1.name AS column_name,
+            s2.name AS referenced_schema,
             t2.name AS referenced_table,
             c2.name AS referenced_column
           FROM sys.foreign_keys fk
@@ -292,13 +293,20 @@ export class MSSQLAdapter implements DatabaseAdapter {
           JOIN sys.columns c1 ON c1.object_id = fkc.parent_object_id AND c1.column_id = fkc.parent_column_id
           JOIN sys.columns c2 ON c2.object_id = fkc.referenced_object_id AND c2.column_id = fkc.referenced_column_id
           JOIN sys.tables t2 ON t2.object_id = fkc.referenced_object_id
+          JOIN sys.schemas s2 ON s2.schema_id = t2.schema_id
           WHERE fk.parent_object_id = OBJECT_ID(@objectName)
           ORDER BY fk.name
         `);
       const foreignKeys: ForeignKey[] = (fkRes.recordset ?? []).map(
-        (row: { constraint_name: string; column_name: string; referenced_table: string; referenced_column: string }) => ({
+        (row: {
+          constraint_name: string;
+          column_name: string;
+          referenced_schema: string;
+          referenced_table: string;
+          referenced_column: string;
+        }) => ({
           column: row.column_name,
-          referencedTable: row.referenced_table,
+          referencedTable: `${row.referenced_schema}.${row.referenced_table}`,
           referencedColumn: row.referenced_column,
           constraintName: row.constraint_name,
         })

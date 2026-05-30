@@ -193,18 +193,20 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         comment: (row.column_comment as string | null) ?? null,
       }));
 
-      // 索引信息
+      // 索引信息:用 unnest(indkey) WITH ORDINALITY 按索引键序展开,保证复合索引列序正确;
+      // 表达式/函数索引的 indkey 项为 0,LEFT JOIN pg_attribute 取不到列名,用 pg_get_indexdef 补表达式文本。
       const idxSql = `
         SELECT i.relname AS index_name,
-               a.attname AS column_name,
+               COALESCE(a.attname, pg_get_indexdef(ix.indexrelid, k.ord::int, true)) AS column_name,
                ix.indisunique AS is_unique
         FROM pg_class t
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
-        JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
         JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN LATERAL unnest(string_to_array(ix.indkey::text, ' ')::int[]) WITH ORDINALITY AS k(attnum, ord) ON true
+        LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
         WHERE t.relname = $1 AND n.nspname = $2 AND t.relkind IN ('r', 'p')
-        ORDER BY i.relname, a.attnum
+        ORDER BY i.relname, k.ord
       `;
       const idxResult = await this.pool!.query(idxSql, [table, effectiveSchema]);
       const indexMap = new Map<string, TableIndex>();
@@ -235,10 +237,11 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
         if (pkColumns.has(col.name)) col.key = "PRI";
       }
 
-      // 外键信息
+      // 外键信息;referencedTable 带 schema 限定,避免跨 schema 同名父表歧义
       const fkSql = `
         SELECT
           kcu.column_name,
+          ccu.table_schema AS referenced_schema,
           ccu.table_name AS referenced_table,
           ccu.column_name AS referenced_column,
           tc.constraint_name
@@ -254,7 +257,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
       const fkResult = await this.pool!.query(fkSql, [table, effectiveSchema]);
       const foreignKeys: ForeignKey[] = fkResult.rows.map((row) => ({
         column: row.column_name as string,
-        referencedTable: row.referenced_table as string,
+        referencedTable: `${row.referenced_schema as string}.${row.referenced_table as string}`,
         referencedColumn: row.referenced_column as string,
         constraintName: row.constraint_name as string,
       }));

@@ -42,12 +42,13 @@ describe("OracleAdapter", () => {
     assert.match(calls.at(-1).sql, /owner NOT LIKE 'APEX!_%' ESCAPE '!'/);
   });
 
-  test("配置 schema 时会归一化为大写并限定表清单", async () => {
+  test("配置 schema 时保留原值并大小写兼容地限定表清单", async () => {
     const { adapter, calls } = createOracleAdapter("billing");
 
     await adapter.listTables();
 
-    assert.equal(calls.at(-1).binds.schema, "BILLING");
+    assert.equal(calls.at(-1).binds.schema, "billing");
+    assert.match(calls.at(-1).sql, /t\.owner = UPPER\(:schema\)/);
   });
 
   test("未配置 schema 时唯一匹配表会自动解析 schema 并读取结构", async () => {
