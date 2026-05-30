@@ -11,6 +11,20 @@ All notable changes to this project will be documented in this file.
 - **MariaDB support**: `type: "mariadb"` is now available as a MySQL protocol-compatible adapter while preserving the MariaDB type in MCP responses.
 - **Oracle Database support**: `type: "oracle"` adds Oracle Thin mode connections, schema-aware table discovery, table description, sampling, row-count estimation, explain plans, and transaction support.
 
+### Changed
+
+- **Schema-qualified foreign keys**: `describe_table` foreign-key `referencedTable` is now schema-qualified (`schema.table`) for PostgreSQL, MSSQL, and Oracle to disambiguate same-named parent tables across schemas; MySQL/SQLite keep bare table names.
+
+### Fixed
+
+- **PostgreSQL composite index column order**: index columns are now returned in index-key order (via `unnest(indkey) WITH ORDINALITY`) instead of table-column order, so multi-column indexes report the correct leading column.
+- **PostgreSQL expression indexes**: expression/functional index columns (e.g. `lower(email)`) are no longer silently dropped; their definition is sourced from `pg_get_indexdef`.
+- **MSSQL included columns**: index discovery now excludes `INCLUDE` (non-key) columns, which previously polluted the key list and sorted ahead of key columns.
+- **Oracle `NUMBER(*,s)` types**: columns with a scale but null precision now render as `NUMBER(*,s)` instead of a bare `NUMBER`, preserving scale.
+- **Oracle schema case sensitivity**: configured/passed schema names are no longer force-uppercased, so quoted lower/mixed-case owners resolve (matching is case-tolerant via `OR UPPER(...)`).
+- **Oracle DDL transaction reporting**: when a step fails after a prior DDL statement (which Oracle implicitly commits and cannot roll back), the error now notes that the prior DDL was already committed.
+- **`db://tables` error handling**: a `listTables()` failure during a resource read now returns a structured JSON error instead of an unstructured protocol error.
+
 ## [1.2.2] — 2026-05-29
 
 ### Breaking Changes
