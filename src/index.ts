@@ -6,6 +6,7 @@ import { MySQLAdapter } from "./adapters/mysql.js";
 import { PostgreSQLAdapter } from "./adapters/postgresql.js";
 import { SQLiteAdapter } from "./adapters/sqlite.js";
 import { MSSQLAdapter } from "./adapters/mssql.js";
+import { OracleAdapter } from "./adapters/oracle.js";
 import type { DbConfig } from "./config.js";
 import { startStdio, startHttp } from "./transport.js";
 
@@ -64,7 +65,9 @@ async function main(): Promise<void> {
 function createAdapterFromConfig(config: DbConfig) {
   switch (config.type) {
     case "mysql":
+    case "mariadb":
       return new MySQLAdapter({
+        type: config.type,
         host: config.host,
         port: config.port,
         user: config.user,
@@ -93,14 +96,23 @@ function createAdapterFromConfig(config: DbConfig) {
         encrypt: config.encrypt,
         trustServerCertificate: config.trustServerCertificate,
       });
+    case "oracle":
+      return new OracleAdapter({
+        host: config.host,
+        port: config.port,
+        user: config.user,
+        password: config.password,
+        database: config.database,
+        schema: config.schema,
+      });
     default:
       throw new Error(`不支持的数据库类型: ${config.type}`);
   }
 }
 
-/** 格式化 PostgreSQL/MSSQL schema 信息用于启动日志。 */
+/** 格式化支持 schema 的数据库信息用于启动日志。 */
 function formatSchemaInfo(config: DbConfig): string {
-  const supportsSchema = config.type === "postgresql" || config.type === "mssql";
+  const supportsSchema = config.type === "postgresql" || config.type === "mssql" || config.type === "oracle";
   return supportsSchema ? ` schema=${config.schema || "all"}` : "";
 }
 

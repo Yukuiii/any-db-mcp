@@ -1,5 +1,5 @@
 /** 数据库类型 */
-export type DatabaseType = "mysql" | "postgresql" | "sqlite" | "mssql";
+export type DatabaseType = "mysql" | "mariadb" | "postgresql" | "sqlite" | "mssql" | "oracle";
 
 /** 表清单条目:可选 schema + 表名 + 表注释(无注释或 SQLite 无原生概念时为 null) */
 export interface TableInfo {
@@ -16,7 +16,7 @@ export interface TableColumn {
   defaultValue: string | null;
   key: string;
   extra: string;
-  /** 列注释(MySQL COLUMN_COMMENT / PG col_description / MSSQL MS_Description;无注释或 SQLite 为 null) */
+  /** 列注释(MySQL/MariaDB COLUMN_COMMENT / PG col_description / MSSQL MS_Description / Oracle COMMENTS;无注释或 SQLite 为 null) */
   comment: string | null;
 }
 
@@ -46,7 +46,7 @@ export interface TableDescription {
 
 /**
  * 表行数信息。
- * - 估算值（MySQL information_schema / PG pg_class.reltuples）速度快但可能不准；
+ * - 估算值（MySQL/MariaDB information_schema / PG pg_class.reltuples / Oracle ALL_TABLES.NUM_ROWS）速度快但可能不准；
  * - SQLite 用真实 COUNT(*),isEstimate = false；
  * - 元数据缺失时 value 为 null。
  */
@@ -79,7 +79,7 @@ export interface TransactionResult {
   error: string | null;
 }
 
-/** 数据库适配器接口，统一三种数据库的操作契约 */
+/** 数据库适配器接口，统一多种数据库的操作契约 */
 export interface DatabaseAdapter {
   /** 数据库类型标识 */
   readonly type: DatabaseType;
@@ -108,7 +108,7 @@ export interface DatabaseAdapter {
   /** 列出当前连接数据库的所有表(含表注释) */
   listTables(): Promise<TableInfo[]>;
 
-  /** 查看表结构;支持 PostgreSQL/MSSQL 传入 schema 精确定位 */
+  /** 查看表结构;支持 PostgreSQL/MSSQL/Oracle 传入 schema 精确定位 */
   describeTable(table: string, schema?: string): Promise<TableDescription>;
 
   /** 采样表中前 N 行数据,用于让 LLM 直观了解字段值 */

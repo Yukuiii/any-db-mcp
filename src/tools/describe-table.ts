@@ -12,10 +12,10 @@ export function registerDescribeTableTool(server: McpServer): void {
     "describe_table",
     {
       description:
-        "查看指定表的详细信息,一次返回:列定义/索引/外键/估算行数/数据采样。PostgreSQL/MSSQL 跨 schema 同名表时应传 schema 精确定位。LLM 在写 SQL 前调用此工具可同时拿到字段结构、关联关系、表大小量级、字段真实取值示例,大幅减少猜测。",
+        "查看指定表的详细信息,一次返回:列定义/索引/外键/估算行数/数据采样。PostgreSQL/MSSQL/Oracle 跨 schema 同名表时应传 schema 精确定位。LLM 在写 SQL 前调用此工具可同时拿到字段结构、关联关系、表大小量级、字段真实取值示例,大幅减少猜测。",
       inputSchema: {
         table: z.string().min(1).describe("要查看的表名"),
-        schema: z.string().min(1).optional().describe("仅 PostgreSQL/MSSQL 使用:schema 名称,用于跨 schema 精确定位"),
+        schema: z.string().min(1).optional().describe("仅 PostgreSQL/MSSQL/Oracle 使用:schema 名称,用于跨 schema 精确定位"),
         sampleLimit: z
           .number()
           .int()

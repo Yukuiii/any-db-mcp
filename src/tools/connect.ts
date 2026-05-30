@@ -5,6 +5,7 @@ import { MySQLAdapter } from "../adapters/mysql.js";
 import { PostgreSQLAdapter } from "../adapters/postgresql.js";
 import { SQLiteAdapter } from "../adapters/sqlite.js";
 import { MSSQLAdapter } from "../adapters/mssql.js";
+import { OracleAdapter } from "../adapters/oracle.js";
 import type { DatabaseType } from "../adapters/types.js";
 import type { AppConfig } from "../config.js";
 import { ok, fail, errorMessage } from "../utils/response.js";
@@ -23,15 +24,18 @@ export function registerConnectTool(server: McpServer, config: AppConfig): void 
     "connect",
     {
       description:
-        "连接到数据库。支持 MySQL、PostgreSQL、SQLite、MSSQL 四种类型。传入连接参数后会建立新连接,之前的连接会被自动关闭。SQLite 只需要传 filepath 参数;PostgreSQL/MSSQL 可通过 schema 指定命名空间,不传则列出所有非系统 schema;MSSQL 在 SQL Server 2019+ 默认要求加密,自签证书环境需将 trustServerCertificate 设为 true。连接成功后返回当前数据库的表信息列表与当前权限模式(权限模式仅由 server 启动配置决定,无法通过此工具修改)。",
+        "连接到数据库。支持 MySQL、MariaDB、PostgreSQL、SQLite、MSSQL、Oracle。传入连接参数后会建立新连接,之前的连接会被自动关闭。SQLite 只需要传 filepath 参数;PostgreSQL/MSSQL/Oracle 可通过 schema 指定命名空间,不传则列出所有非系统 schema;Oracle 的 database 参数表示 service name 或 TNS connect string;MSSQL 在 SQL Server 2019+ 默认要求加密,自签证书环境需将 trustServerCertificate 设为 true。连接成功后返回当前数据库的表信息列表与当前权限模式(权限模式仅由 server 启动配置决定,无法通过此工具修改)。",
       inputSchema: {
-        type: z.enum(["mysql", "postgresql", "sqlite", "mssql"]).describe("数据库类型"),
+        type: z.enum(["mysql", "mariadb", "postgresql", "sqlite", "mssql", "oracle"]).describe("数据库类型"),
         host: z.string().default("localhost").describe("数据库主机地址(SQLite 不需要)"),
-        port: z.number().default(0).describe("数据库端口(0 表示使用默认端口:MySQL 3306,PostgreSQL 5432,MSSQL 1433)"),
+        port: z
+          .number()
+          .default(0)
+          .describe("数据库端口(0 表示使用默认端口:MySQL/MariaDB 3306,PostgreSQL 5432,MSSQL 1433,Oracle 1521)"),
         user: z.string().default("").describe("数据库用户名(SQLite 不需要)"),
         password: z.string().default("").describe("数据库密码(SQLite 不需要)"),
-        database: z.string().default("").describe("数据库名(SQLite 不需要)"),
-        schema: z.string().default("").describe("仅 PostgreSQL/MSSQL 使用:schema 名称;不传则列出所有非系统 schema"),
+        database: z.string().default("").describe("数据库名(SQLite 不需要;Oracle 填 service name 或 TNS connect string)"),
+        schema: z.string().default("").describe("仅 PostgreSQL/MSSQL/Oracle 使用:schema 名称;不传则列出所有非系统 schema"),
         filepath: z.string().default("").describe("SQLite 数据库文件路径(仅 SQLite 使用)"),
         encrypt: z
           .boolean()
@@ -94,9 +98,11 @@ function notifyResourceListChanged(server: McpServer): void {
 /** 各数据库默认端口 */
 const DEFAULT_PORTS: Record<DatabaseType, number> = {
   mysql: 3306,
+  mariadb: 3306,
   postgresql: 5432,
   sqlite: 0,
   mssql: 1433,
+  oracle: 1521,
 };
 
 /** 根据类型创建对应数据库适配器 */
@@ -118,7 +124,9 @@ function createAdapter(
 
   switch (type) {
     case "mysql":
+    case "mariadb":
       return new MySQLAdapter({
+        type,
         host: params.host,
         port: resolvedPort,
         user: params.user,
@@ -150,6 +158,15 @@ function createAdapter(
         encrypt: params.encrypt,
         trustServerCertificate: params.trustServerCertificate,
       });
+    case "oracle":
+      return new OracleAdapter({
+        host: params.host,
+        port: resolvedPort,
+        user: params.user,
+        password: params.password,
+        database: params.database,
+        schema: params.schema,
+      });
     default:
       throw new Error(`不支持的数据库类型: ${type}`);
   }
@@ -164,9 +181,27 @@ function formatConnectionInfo(
     return `SQLite (${params.filepath})`;
   }
   const resolvedPort = params.port === 0 ? DEFAULT_PORTS[type] : params.port;
-  const label = type === "mysql" ? "MySQL" : type === "postgresql" ? "PostgreSQL" : "MSSQL";
+  const label = formatDatabaseLabel(type);
   const dbInfo = params.database ? `/${params.database}` : "";
   const schemaInfo =
-    type === "postgresql" || type === "mssql" ? ` schema=${params.schema || "all"}` : "";
+    type === "postgresql" || type === "mssql" || type === "oracle" ? ` schema=${params.schema || "all"}` : "";
   return `${label} ${params.host}:${resolvedPort}${dbInfo}${schemaInfo}`;
+}
+
+/** 格式化数据库类型名称用于连接信息。 */
+function formatDatabaseLabel(type: DatabaseType): string {
+  switch (type) {
+    case "mysql":
+      return "MySQL";
+    case "mariadb":
+      return "MariaDB";
+    case "postgresql":
+      return "PostgreSQL";
+    case "mssql":
+      return "MSSQL";
+    case "oracle":
+      return "Oracle";
+    case "sqlite":
+      return "SQLite";
+  }
 }

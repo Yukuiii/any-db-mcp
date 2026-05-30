@@ -5,13 +5,13 @@
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `PERMISSION_MODE` | 权限模式 | `readwrite` |
-| `DB_TYPE` | 数据库类型 | `mysql` |
+| `DB_TYPE` | 数据库类型:mysql / mariadb / postgresql / sqlite / mssql / oracle | `mysql` |
 | `DB_HOST` | 数据库主机 | `localhost` |
 | `DB_PORT` | 数据库端口 | 按类型自动选择 |
 | `DB_USER` | 用户名 | `root` |
 | `DB_PASSWORD` | 密码 | 空 |
 | `DB_NAME` | 数据库名 | 空 |
-| `DB_SCHEMA` | PostgreSQL/MSSQL schema 名称；空值表示所有非系统 schema | 空 |
+| `DB_SCHEMA` | PostgreSQL/MSSQL/Oracle schema 名称；空值表示所有非系统 schema | 空 |
 | `DB_FILEPATH` | SQLite 文件路径 | 空 |
 | `DB_ENCRYPT` | MSSQL TLS 加密 | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL 信任自签证书 | `false` |
@@ -23,6 +23,7 @@
 | `MCP_AUTH_TOKEN` | Bearer Token | 空（不鉴权） |
 
 不配置 `DB_*` 变量时，server 启动后不自动连接，需 LLM 调用 `connect` 工具手动连接。
+Oracle 默认使用 `oracledb` Thin mode；`DB_NAME` 表示 service name，也可以直接填写完整 TNS connect string。
 
 ## 传输方式
 

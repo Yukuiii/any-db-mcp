@@ -14,6 +14,8 @@ import type {
 
 /** MySQL 连接配置 */
 export interface MySQLConfig {
+  /** MySQL 协议兼容类型,用于让 MariaDB 在 MCP 层保留独立类型标识。 */
+  type?: "mysql" | "mariadb";
   host: string;
   port: number;
   user: string;
@@ -21,14 +23,15 @@ export interface MySQLConfig {
   database: string;
 }
 
-/** MySQL 数据库适配器 */
+/** MySQL/MariaDB 数据库适配器 */
 export class MySQLAdapter implements DatabaseAdapter {
-  readonly type = "mysql" as const;
+  readonly type: "mysql" | "mariadb";
   private pool: mysql.Pool | null = null;
   private config: MySQLConfig;
 
   constructor(config: MySQLConfig) {
     this.config = config;
+    this.type = config.type ?? "mysql";
   }
 
   /** 创建连接池并验证可用性 */

@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - **Schema-aware PostgreSQL/MSSQL discovery**: when `connect.schema` / `DB_SCHEMA` is empty, table discovery now scans all non-system schemas; when set, table listing, description, row-count estimation, and sampling are scoped to that schema.
 - **Schema-qualified metadata**: `tables[]`, `search_schema`, `describe_table`, and `db://tables` responses now include `schema`, and `db://table/{schema}/{name}` is available for schema-qualified resources.
+- **MariaDB support**: `type: "mariadb"` is now available as a MySQL protocol-compatible adapter while preserving the MariaDB type in MCP responses.
+- **Oracle Database support**: `type: "oracle"` adds Oracle Thin mode connections, schema-aware table discovery, table description, sampling, row-count estimation, explain plans, and transaction support.
 
 ## [1.2.2] — 2026-05-29
 

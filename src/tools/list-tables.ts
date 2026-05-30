@@ -8,7 +8,7 @@ export function registerListTablesTool(server: McpServer): void {
     "list_tables",
     {
       description:
-        "列出当前连接数据库的所有表名与表注释。tables 字段为包含 schema/name/comment 的结构化列表。PostgreSQL/MSSQL 未配置 schema 时返回所有非系统 schema 的表,已配置 schema 时只返回该 schema 的表。",
+        "列出当前连接数据库的所有表名与表注释。tables 字段为包含 schema/name/comment 的结构化列表。PostgreSQL/MSSQL/Oracle 未配置 schema 时返回所有非系统 schema 的表,已配置 schema 时只返回该 schema 的表。",
     },
     async () => {
       const startedAt = performance.now();

@@ -124,11 +124,11 @@ interface DatabaseAdapter {
 
 ### MCP Resources (`resources.ts`)
 
-暴露两个资源端点，与 Tools 互补：
+暴露三个资源端点，与 Tools 互补：
 
 - `db://tables` — 当前库所有表名 + 表注释 + 估算行数
 - `db://table/{name}` — 单表列定义与索引（动态模板，每表一个 URI）
-- `db://table/{schema}/{name}` — PostgreSQL/MSSQL 跨 schema 精确单表结构
+- `db://table/{schema}/{name}` — PostgreSQL/MSSQL/Oracle 跨 schema 精确单表结构
 
 Resources 是"声明式订阅"，由客户端缓存复用；Tools 是"命令式调用"，适合需要最新数据时。
 

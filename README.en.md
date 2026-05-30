@@ -2,13 +2,13 @@
 
 English | [简体中文](./README.md)
 
-> An MCP (Model Context Protocol) server that lets LLMs safely operate on databases. Supports **MySQL / PostgreSQL / SQLite / Microsoft SQL Server**.
+> An MCP (Model Context Protocol) server that lets LLMs safely operate on databases. Supports **MySQL / MariaDB / PostgreSQL / SQLite / Microsoft SQL Server / Oracle**.
 
 [![npm version](https://img.shields.io/npm/v/@sakura0v0/any-db-mcp.svg)](https://www.npmjs.com/package/@sakura0v0/any-db-mcp)
 
 ## Features
 
-- **Unified adapter**: One tool surface for MySQL, PostgreSQL, SQLite, and MSSQL
+- **Unified adapter**: One tool surface for MySQL, MariaDB, PostgreSQL, SQLite, MSSQL, and Oracle
 - **Dual transport**: `stdio` for local subprocess + `Streamable HTTP` for remote access, the latter with stateful sessions and optional Bearer Token auth
 - **MCP Resources for schema**: `db://tables`, `db://table/{name}`, and `db://table/{schema}/{name}` let clients subscribe to live schema metadata, cutting the per-conversation token cost of repeated describe calls
 - **Three permission modes**: `readonly` / `readwrite` / `full`, fixed at startup via env var, **tamper-proof at runtime** (5-layer anti-privilege-escalation design)
@@ -99,13 +99,13 @@ Corresponding MCP client config:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PERMISSION_MODE` | Permission mode: `readonly` / `readwrite` / `full` | `readwrite` |
-| `DB_TYPE` | Database type: `mysql` / `postgresql` / `sqlite` / `mssql` | `mysql` |
+| `DB_TYPE` | Database type: `mysql` / `mariadb` / `postgresql` / `sqlite` / `mssql` / `oracle` | `mysql` |
 | `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `3306` (MySQL) / `5432` (PG) / `1433` (MSSQL) |
+| `DB_PORT` | Database port | `3306` (MySQL/MariaDB) / `5432` (PG) / `1433` (MSSQL) / `1521` (Oracle) |
 | `DB_USER` | Database user | `root` |
 | `DB_PASSWORD` | Database password | (empty) |
 | `DB_NAME` | Default database | (empty) |
-| `DB_SCHEMA` | PostgreSQL/MSSQL only: schema name; empty means all non-system schemas | (empty) |
+| `DB_SCHEMA` | PostgreSQL/MSSQL/Oracle only: schema name; empty means all non-system schemas | (empty) |
 | `DB_FILEPATH` | SQLite database file path | (empty) |
 | `DB_ENCRYPT` | MSSQL only: enable TLS encryption | `true` |
 | `DB_TRUST_SERVER_CERTIFICATE` | MSSQL only: trust self-signed certificate | `false` |
@@ -127,6 +127,19 @@ Example inputs the LLM passes to the `connect` tool:
 ```json
 {
   "type": "mysql",
+  "host": "localhost",
+  "port": 3306,
+  "user": "root",
+  "password": "xxx",
+  "database": "mydb"
+}
+```
+
+### MariaDB
+
+```json
+{
+  "type": "mariadb",
   "host": "localhost",
   "port": 3306,
   "user": "root",
@@ -174,9 +187,25 @@ Example inputs the LLM passes to the `connect` tool:
 }
 ```
 
+### Oracle
+
+```json
+{
+  "type": "oracle",
+  "host": "localhost",
+  "port": 1521,
+  "user": "app",
+  "password": "xxx",
+  "database": "FREEPDB1",
+  "schema": "BILLING"
+}
+```
+
+Oracle uses `oracledb` Thin mode. `database` may be a service name or a full TNS connect string.
+
 > Wire-compatible databases reuse existing adapters:
 >
-> - **MariaDB / TiDB / OceanBase** (MySQL wire protocol) → use `type: mysql`
+> - **TiDB / OceanBase** (MySQL wire protocol) → use `type: mysql`
 > - **CockroachDB / YugabyteDB** (PostgreSQL wire protocol) → use `type: postgresql`
 
 ## Transports
@@ -243,7 +272,7 @@ Every tool returns a unified JSON structure.
 
 `list_tables`, `connect`, and connected `connection_status` responses all include
 `tableCount` and `tables`. `tables` is a structured table-info array, not a
-string array; PostgreSQL/MSSQL entries include `schema`:
+string array; PostgreSQL/MSSQL/Oracle entries include `schema`:
 
 ```json
 {
@@ -304,13 +333,15 @@ return `null`.
 
 | Database | Source | `rowCountIsEstimate` | Notes |
 |----------|--------|----------------------|-------|
-| MySQL | `information_schema.TABLES.TABLE_ROWS` | `true` | InnoDB estimate; avoids a full-table COUNT(*) |
+| MySQL/MariaDB | `information_schema.TABLES.TABLE_ROWS` | `true` | InnoDB estimate; avoids a full-table COUNT(*) |
 | PostgreSQL | `pg_class.reltuples` | `true` | Depends on ANALYZE; `null` if never analyzed |
+| MSSQL | `sys.partitions` | `true` | Metadata estimate; avoids a full-table COUNT(*) |
+| Oracle | `ALL_TABLES.NUM_ROWS` | `true` | Depends on optimizer stats; `null` if stats are missing |
 | SQLite | `SELECT COUNT(*)` | `false` | Local file, exact value |
 
 ## MCP Resources
 
-In addition to tools, the server exposes two MCP Resources so clients can
+In addition to tools, the server exposes three MCP Resources so clients can
 subscribe to live schema metadata (with `notifications/resources/list_changed`
 firing on connect/disconnect):
 
@@ -318,7 +349,7 @@ firing on connect/disconnect):
 |-----|------|-------------|
 | `db://tables` | Static | All table names + comments + estimated row counts as JSON; lets the LLM size up the database in one read |
 | `db://table/{name}` | Dynamic template | Column and index definitions per table; one URI per table, generated from the live connection |
-| `db://table/{schema}/{name}` | Dynamic template | Schema-qualified table structure for PostgreSQL/MSSQL |
+| `db://table/{schema}/{name}` | Dynamic template | Schema-qualified table structure for PostgreSQL/MSSQL/Oracle |
 
 Successful `connect` / `disconnect` calls emit
 `notifications/resources/list_changed`; subscribing clients refresh
@@ -381,10 +412,11 @@ src/
 ├── db.ts                 DatabaseManager singleton holding the active Adapter
 ├── adapters/
 │   ├── types.ts          Unified DatabaseAdapter interface
-│   ├── mysql.ts          mysql2/promise pool implementation
+│   ├── mysql.ts          mysql2/promise pool implementation (MySQL/MariaDB)
 │   ├── postgresql.ts     pg pool implementation
 │   ├── sqlite.ts         better-sqlite3 implementation
-│   └── mssql.ts          mssql pool implementation (SHOWPLAN_XML via transaction)
+│   ├── mssql.ts          mssql pool implementation (SHOWPLAN_XML via transaction)
+│   └── oracle.ts         oracledb Thin mode pool implementation
 └── tools/
     ├── index.ts          Tool registration entrypoint
     ├── connect.ts        connect tool
